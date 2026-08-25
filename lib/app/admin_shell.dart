@@ -40,7 +40,7 @@ class _AdminShellState extends State<AdminShell> {
         _Destination(
           label: 'Accounts',
           icon: Icons.manage_accounts_outlined,
-          page: AccountsPage(api: widget.api),
+          page: AccountsPage(api: widget.api, session: widget.session),
         ),
       if (authorization.allows(OperatorCapability.reviewCatalog) ||
           authorization.allows(OperatorCapability.curateCatalog))
@@ -49,6 +49,7 @@ class _AdminShellState extends State<AdminShell> {
           icon: Icons.inventory_2_outlined,
           page: CatalogPage(
             api: widget.api,
+            session: widget.session,
             canReview: authorization.allows(
               OperatorCapability.reviewCatalog,
             ),
@@ -61,7 +62,7 @@ class _AdminShellState extends State<AdminShell> {
         _Destination(
           label: 'Billing',
           icon: Icons.receipt_long_outlined,
-          page: BillingPage(api: widget.api),
+          page: BillingPage(api: widget.api, session: widget.session),
         ),
     ];
     if (_selected >= destinations.length) _selected = 0;
@@ -112,4 +113,3 @@ class _AdminShellState extends State<AdminShell> {
     );
   }
 }
-

@@ -12,13 +12,14 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   const backendUrl = String.fromEnvironment(
-    'PROVIDENTIA_API_URL',
+    'PROVIDENTIA_API_BASE_URL',
     defaultValue: 'http://localhost:8080',
   );
+  final backendUri = validateBackendUri(Uri.parse(backendUrl));
   final credentialStore = SecureCredentialStore();
   late final SessionController session;
   final api = ApiClient(
-    baseUri: Uri.parse(backendUrl),
+    baseUri: backendUri,
     httpClient: http.Client(),
     accessTokenProvider: () => session.accessToken,
     onAuthorizationLost: () => session.authorizationLost(),
@@ -28,4 +29,3 @@ Future<void> main() async {
   runApp(ProvidentiaAdminApp(api: api, session: session));
   unawaited(session.restore());
 }
-

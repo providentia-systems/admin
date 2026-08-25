@@ -28,7 +28,6 @@ final class CatalogRepository {
 
   Future<List<CatalogQueueItem>> contributionReview({
     String? status,
-    String? type,
     int limit = 50,
     int offset = 0,
   }) async {
@@ -36,7 +35,6 @@ final class CatalogRepository {
       '/api/v1/catalog-contributions/review',
       query: <String, String>{
         if (status != null) 'status': status,
-        if (type != null) 'type': type,
         'limit': '$limit',
         'offset': '$offset',
       },
@@ -108,9 +106,13 @@ final class CatalogRepository {
     );
   }
 
-  Future<ModerationPreview> imagePreview(String contributionId) async {
+  Future<ModerationPreview> imagePreview(
+    String contributionId, {
+    required int expectedRevision,
+  }) async {
     final response = await _api.get(
       '/api/v1/catalog-contributions/$contributionId/image-preview',
+      query: <String, String>{'expectedRevision': '$expectedRevision'},
       headers: const <String, String>{'Accept': 'image/webp'},
     );
     final contentType = response.headers['content-type']?.split(';').first;
@@ -173,4 +175,3 @@ final class CatalogRepository {
     return difference == 0;
   }
 }
-

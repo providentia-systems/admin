@@ -35,16 +35,16 @@ final class OperatorAuthorization {
         .toSet();
     final capabilities = <OperatorCapability>{};
     if (roles.contains(PlatformRole.administrator)) {
-      capabilities.addAll(const <OperatorCapability>{
-        OperatorCapability.manageAccounts,
-        OperatorCapability.manageAdministrators,
-      });
+      capabilities.addAll(OperatorCapability.values);
     }
     if (roles.contains(PlatformRole.catalogReviewer)) {
       capabilities.add(OperatorCapability.reviewCatalog);
     }
     if (roles.contains(PlatformRole.catalogCurator)) {
-      capabilities.add(OperatorCapability.curateCatalog);
+      capabilities.addAll(const <OperatorCapability>{
+        OperatorCapability.reviewCatalog,
+        OperatorCapability.curateCatalog,
+      });
     }
     if (roles.contains(PlatformRole.billingOperator)) {
       capabilities.addAll(const <OperatorCapability>{
@@ -66,4 +66,3 @@ final class OperatorAuthorization {
   bool allows(OperatorCapability capability) => capabilities.contains(capability);
   bool get isOperator => capabilities.isNotEmpty;
 }
-

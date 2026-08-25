@@ -29,7 +29,7 @@ access. Owner-only bootstrap/recovery stays in the backend CLI.
 bash tools/agent-setup.sh
 source .agent-env
 flutter run -d linux \
-  --dart-define=PROVIDENTIA_API_URL=http://localhost:8080
+  --dart-define=PROVIDENTIA_API_BASE_URL=http://localhost:8080
 ```
 
 See [the agent environment guide](docs/development/agent-environment.md) for the
@@ -49,4 +49,3 @@ lane. The canonical backend contract is frozen under `contracts/openapi/`.
 This repository contains proprietary Providentia product source. The owner has
 authorized development through public branches and draft pull requests; this
 does not grant redistribution or relicensing rights.
-

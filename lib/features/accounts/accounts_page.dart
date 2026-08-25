@@ -3,13 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/auth/session_controller.dart';
 import 'account_models.dart';
 import 'account_repository.dart';
 
 final class AccountsPage extends StatefulWidget {
-  const AccountsPage({required this.api, super.key});
+  const AccountsPage({required this.api, required this.session, super.key});
 
   final AdminApi api;
+  final SessionController session;
 
   @override
   State<AccountsPage> createState() => _AccountsPageState();
@@ -22,7 +24,7 @@ class _AccountsPageState extends State<AccountsPage> {
   OperatorAccountPage? _page;
   OperatorAccount? _selected;
   String? _status;
-  Object? _error;
+  var _hasError = false;
   var _loading = true;
 
   @override
@@ -93,8 +95,8 @@ class _AccountsPageState extends State<AccountsPage> {
           ],
         ),
         const SizedBox(height: 16),
-        if (_error case final error?)
-          _ErrorBanner(error: error, retry: _load),
+        if (_hasError)
+          _ErrorBanner(retry: _load),
         if (_loading) const LinearProgressIndicator(),
         const SizedBox(height: 8),
         Expanded(
@@ -134,16 +136,17 @@ class _AccountsPageState extends State<AccountsPage> {
   );
 
   Future<void> _load() async {
+    final epoch = widget.session.authorizationEpoch;
     setState(() {
       _loading = true;
-      _error = null;
+      _hasError = false;
     });
     try {
       final page = await _repository.list(
         search: _search.text,
         status: _status,
       );
-      if (!mounted) return;
+      if (!_isAuthorized(epoch)) return;
       setState(() {
         _page = page;
         _loading = false;
@@ -153,24 +156,25 @@ class _AccountsPageState extends State<AccountsPage> {
           !page.data.any((account) => account.userId == selectedId)) {
         setState(() => _selected = null);
       }
-    } on Object catch (error) {
-      if (!mounted) return;
+    } on Object {
+      if (!_isAuthorized(epoch)) return;
       setState(() {
         _loading = false;
-        _error = error;
+        _hasError = true;
       });
     }
   }
 
   Future<void> _select(OperatorAccount account) async {
+    final epoch = widget.session.authorizationEpoch;
     setState(() => _selected = account);
     try {
       final detail = await _repository.get(account.userId);
-      if (mounted && _selected?.userId == detail.userId) {
+      if (_isAuthorized(epoch) && _selected?.userId == detail.userId) {
         setState(() => _selected = detail);
       }
-    } on Object catch (error) {
-      if (mounted) _snack('Could not load account: $error');
+    } on Object {
+      if (_isAuthorized(epoch)) _snack('The account could not be loaded.');
     }
   }
 
@@ -193,7 +197,7 @@ class _AccountsPageState extends State<AccountsPage> {
       await _load();
     } on ApiException catch (error) {
       if (error.isConflict) await _select(selected);
-      if (mounted) _snack(error.message);
+      if (mounted) _snack(_safeApiMessage(error));
     }
   }
 
@@ -212,7 +216,7 @@ class _AccountsPageState extends State<AccountsPage> {
       await _load();
     } on ApiException catch (error) {
       if (error.isConflict) await _select(selected);
-      if (mounted) _snack(error.message);
+      if (mounted) _snack(_safeApiMessage(error));
     }
   }
 
@@ -254,6 +258,15 @@ class _AccountsPageState extends State<AccountsPage> {
   void _snack(String message) => ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(message)));
+
+  bool _isAuthorized(int epoch) =>
+      mounted &&
+      widget.session.phase == SessionPhase.authenticated &&
+      widget.session.authorizationEpoch == epoch;
+
+  static String _safeApiMessage(ApiException error) => error.isConflict
+      ? 'The account changed on the server. Its current state was reloaded.'
+      : 'The account operation was rejected (HTTP ${error.statusCode}).';
 }
 
 final class _AccountList extends StatelessWidget {
@@ -385,17 +398,15 @@ final class _AccountDetail extends StatelessWidget {
 }
 
 final class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.error, required this.retry});
-  final Object error;
+  const _ErrorBanner({required this.retry});
   final VoidCallback retry;
 
   @override
   Widget build(BuildContext context) => MaterialBanner(
-    content: Text('Could not load accounts: $error'),
+    content: const Text('The account list could not be loaded.'),
     leading: Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
     actions: <Widget>[
       TextButton(onPressed: retry, child: const Text('Retry')),
     ],
   );
 }
-

@@ -134,8 +134,8 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await widget.session.startLoginLink(email);
       _schedulePoll();
-    } on Object catch (exception) {
-      if (mounted) _showError(exception);
+    } on Object {
+      if (mounted) _showError();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -154,8 +154,8 @@ class _LoginPageState extends State<LoginPage> {
           _pollTimer?.cancel();
           _pollTimer = null;
         }
-      } on Object catch (exception) {
-        if (mounted) _showError(exception);
+      } on Object {
+        if (mounted) _showError();
       } finally {
         _busy = false;
       }
@@ -170,10 +170,9 @@ class _LoginPageState extends State<LoginPage> {
     if (mounted) setState(() => _busy = false);
   }
 
-  void _showError(Object exception) {
+  void _showError() {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Sign-in failed: $exception')),
+      const SnackBar(content: Text('Sign-in could not be completed safely.')),
     );
   }
 }
-

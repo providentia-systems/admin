@@ -33,7 +33,7 @@ flutter analyze
 flutter test --coverage
 bash tools/verify-structure.sh
 flutter build linux --release \
-  --dart-define=PROVIDENTIA_API_URL=https://api.example.invalid
+  --dart-define=PROVIDENTIA_API_BASE_URL=https://api.example.invalid
 ```
 
 Use `--check` to skip host-package installation when the image already contains
@@ -44,4 +44,3 @@ Never place access tokens, refresh tokens, backend credentials, provider keys,
 or production URLs in repository files or build logs. Native credentials are
 stored under the `providentia.admin.*` keyring namespace and are cleared on any
 loss of operator authorization.
-
