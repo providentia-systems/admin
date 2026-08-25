@@ -4,6 +4,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOL_CACHE="${PROVIDENTIA_AGENT_CACHE:-${PROJECT_ROOT}/.agent-tools}"
 FLUTTER_VERSION="3.44.7"
+FLUTTER_FRAMEWORK_REVISION="84fc5cbb223bc12f83d65b647ff8a56caf779ffd"
 FLUTTER_SHA256="a0edd646c159c0e816788c0e46a4f071199c1320495898f5a679599b583a05a4"
 FLUTTER_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
 FLUTTER_ROOT="${TOOL_CACHE}/flutter-${FLUTTER_VERSION}"
@@ -58,7 +59,12 @@ install_flutter() {
       process.stdin.on("data", chunk => input += chunk);
       process.stdin.on("end", () => {
         const value = JSON.parse(input);
-        process.exit((value.flutterVersion ?? value.frameworkVersion) === "3.44.7" ? 0 : 1);
+        const version = value.flutterVersion ?? value.frameworkVersion;
+        process.exit(
+          version === "3.44.7" &&
+          value.frameworkRevision === "84fc5cbb223bc12f83d65b647ff8a56caf779ffd"
+            ? 0 : 1,
+        );
       });
     '
   }
