@@ -4,33 +4,55 @@ on:
   pull_request:
   push:
     branches: [main, 'codex/**', 'feature/**']
+  schedule:
+    - cron: '29 3 * * 2'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: admin-security-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  dependency-review:
-    if: github.event_name == 'pull_request'
+  repository-security:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
-        with:
-          fail-on-severity: moderate
-
-  secret-scan:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Check out complete history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           fetch-depth: 0
-      - name: Scan repository history
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan complete Git history for credentials
+        run: |
+          mkdir -p build/security
+          docker run --rm --entrypoint gitleaks \
+            -v "$PWD:/repo" \
+            zricethezav/gitleaks:v8.28.0 \
+            detect --source /repo --redact --no-banner \
+            --config /repo/.gitleaks.toml \
+            --report-format sarif \
+            --report-path /repo/build/security/gitleaks.sarif
+
+      - name: Scan dependency graph, secrets and configuration
+        run: |
+          docker run --rm --entrypoint trivy \
+            -v "$PWD:/workspace" \
+            aquasec/trivy:0.65.0 \
+            fs --scanners vuln,misconfig,secret \
+            --ignore-unfixed --severity HIGH,CRITICAL --exit-code 1 \
+            --format sarif \
+            --output /workspace/build/security/trivy-filesystem.sarif \
+            /workspace
+
+      - name: Upload security evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: admin-security-evidence-${{ github.sha }}
+          path: build/security/*.sarif
+          if-no-files-found: warn
+          retention-days: 30
+

@@ -9,7 +9,10 @@ test -f contracts/providentia-v1.json
 test -f contracts/contract.lock.json
 test -f contracts/generated/providentia_api_client/lib/providentia_api_client.dart
 test -f tools/agent-requirements.json
-test -x tools/agent-setup.sh
+test -f tools/agent-setup.sh
+bash -n tools/agent-setup.sh tool/install_flutter_linux.sh \
+  packaging/linux/build-packages.sh packaging/linux/AppRun \
+  packaging/linux/providentia_admin
 
 for forbidden in android ios macos web windows; do
   if [ -d "${forbidden}" ]; then
@@ -46,5 +49,6 @@ ACTUAL="$(sha256sum contracts/providentia-v1.json | cut -d' ' -f1)"
 test "${ACTUAL}" = "${EXPECTED}"
 
 node tool/verify_contract.mjs
+node tool/generate_admin_api_client.mjs --check
 
 echo "Admin structural and contract boundaries verified."
