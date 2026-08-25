@@ -34,7 +34,7 @@ final class CatalogRepository {
     final response = await _api.get(
       '/api/v1/catalog-contributions/review',
       query: <String, String>{
-        if (status != null) 'status': status,
+        'status': ?status,
         'limit': '$limit',
         'offset': '$offset',
       },
@@ -86,9 +86,7 @@ final class CatalogRepository {
     final data = response.jsonObject['data'];
     if (data is! List<Object?>) return const <PublishedCategory>[];
     return List<PublishedCategory>.unmodifiable(
-      data
-          .whereType<Map<String, Object?>>()
-          .map(PublishedCategory.fromJson),
+      data.whereType<Map<String, Object?>>().map(PublishedCategory.fromJson),
     );
   }
 
@@ -135,7 +133,7 @@ final class CatalogRepository {
     return ModerationPreview(
       bytes: response.bytes,
       sha256Digest: actualDigest,
-      contentType: contentType,
+      contentType: 'image/webp',
     );
   }
 

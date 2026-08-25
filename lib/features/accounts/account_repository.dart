@@ -60,4 +60,3 @@ final class AccountRepository {
     return OperatorAccount.fromJson(response.jsonObject);
   }
 }
-

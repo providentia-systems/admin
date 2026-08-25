@@ -33,7 +33,8 @@ final class MemoryCredentialStore implements CredentialStore {
   Future<Map<String, String>> readSession() async => Map.of(session);
 
   @override
-  Future<void> writeInstallationId(String value) async => installationId = value;
+  Future<void> writeInstallationId(String value) async =>
+      installationId = value;
 
   @override
   Future<void> writeSession(Map<String, String> values) async {
@@ -59,17 +60,20 @@ Map<String, String> storedSession() => <String, String>{
 };
 
 void main() {
-  test('restore without credentials signs out and creates installation', () async {
-    final store = MemoryCredentialStore();
-    final api = FakeApi((_) async => throw StateError('must not call API'));
-    final controller = SessionController(api: api, credentialStore: store);
+  test(
+    'restore without credentials signs out and creates installation',
+    () async {
+      final store = MemoryCredentialStore();
+      final api = FakeApi((_) async => throw StateError('must not call API'));
+      final controller = SessionController(api: api, credentialStore: store);
 
-    await controller.restore();
+      await controller.restore();
 
-    expect(controller.phase, SessionPhase.signedOut);
-    expect(store.installationId, isNotNull);
-    expect(api.requests, isEmpty);
-  });
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(store.installationId, isNotNull);
+      expect(api.requests, isEmpty);
+    },
+  );
 
   test('restore bootstraps capabilities from backend roles', () async {
     final store = MemoryCredentialStore()

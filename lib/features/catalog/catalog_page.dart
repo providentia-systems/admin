@@ -74,10 +74,10 @@ class _CatalogPageState extends State<CatalogPage> {
               segments: <ButtonSegment<_CatalogLane>>[
                 if (widget.canReview)
                   const ButtonSegment(
-                  value: _CatalogLane.proposals,
-                  label: Text('Catalog workbench'),
-                  icon: Icon(Icons.rule_folder_outlined),
-                ),
+                    value: _CatalogLane.proposals,
+                    label: Text('Catalog workbench'),
+                    icon: Icon(Icons.rule_folder_outlined),
+                  ),
                 const ButtonSegment(
                   value: _CatalogLane.contributions,
                   label: Text('Contributions'),
@@ -99,8 +99,14 @@ class _CatalogPageState extends State<CatalogPage> {
               DropdownButton<String>(
                 value: _queue,
                 items: const <DropdownMenuItem<String>>[
-                  DropdownMenuItem(value: 'proposals', child: Text('Proposals')),
-                  DropdownMenuItem(value: 'duplicates', child: Text('Duplicates')),
+                  DropdownMenuItem(
+                    value: 'proposals',
+                    child: Text('Proposals'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'duplicates',
+                    child: Text('Duplicates'),
+                  ),
                   DropdownMenuItem(value: 'aliases', child: Text('Aliases')),
                   DropdownMenuItem(value: 'barcodes', child: Text('Barcodes')),
                   DropdownMenuItem(value: 'icons', child: Text('Icons')),
@@ -150,7 +156,9 @@ class _CatalogPageState extends State<CatalogPage> {
                             return ListTile(
                               selected: item.id == _selected?.id,
                               title: Text(item.title),
-                              subtitle: Text('${item.kind} • revision ${item.revision}'),
+                              subtitle: Text(
+                                '${item.kind} • revision ${item.revision}',
+                              ),
                               trailing: Chip(label: Text(item.status)),
                               onTap: () {
                                 _clearPreview();
@@ -323,7 +331,10 @@ class _CatalogPageState extends State<CatalogPage> {
     }
   }
 
-  Future<String?> _textDialog({required String title, required String label}) async {
+  Future<String?> _textDialog({
+    required String title,
+    required String label,
+  }) async {
     final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
@@ -396,8 +407,8 @@ final class _ModerationDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageContribution = isContribution &&
-        item.kind.toLowerCase().contains('image');
+    final imageContribution =
+        isContribution && item.kind.toLowerCase().contains('image');
     return ListView(
       padding: const EdgeInsets.all(20),
       children: <Widget>[
@@ -433,7 +444,8 @@ final class _ModerationDetail extends StatelessWidget {
                 preview!.bytes,
                 gaplessPlayback: false,
                 filterQuality: FilterQuality.medium,
-                errorBuilder: (_, _, _) => const Text('Preview cannot be decoded.'),
+                errorBuilder: (_, _, _) =>
+                    const Text('Preview cannot be decoded.'),
               ),
             ),
             const SizedBox(height: 8),

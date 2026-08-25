@@ -31,11 +31,12 @@ final class LoginLinkChallenge {
 }
 
 final class SessionController extends ChangeNotifier {
-  SessionController({
+  factory SessionController({
     required AdminApi api,
     required CredentialStore credentialStore,
-  }) : _api = api,
-       _credentialStore = credentialStore;
+  }) => SessionController._(api, credentialStore);
+
+  SessionController._(this._api, this._credentialStore);
 
   final AdminApi _api;
   final CredentialStore _credentialStore;
@@ -74,7 +75,9 @@ final class SessionController extends ChangeNotifier {
         return;
       }
       if (!_hasAtomicSession(stored)) {
-        await _purgeSession('Stored administrator credentials were incomplete.');
+        await _purgeSession(
+          'Stored administrator credentials were incomplete.',
+        );
         return;
       }
       _accessToken = stored['accessToken'];
@@ -183,7 +186,9 @@ final class SessionController extends ChangeNotifier {
       await _bootstrapAuthorization();
       return _phase == SessionPhase.authenticated;
     } on Object {
-      await _purgeSession('The administrator session could not be established.');
+      await _purgeSession(
+        'The administrator session could not be established.',
+      );
       rethrow;
     }
   }
@@ -211,7 +216,9 @@ final class SessionController extends ChangeNotifier {
     try {
       await _api.post(
         '/api/v1/auth/logout',
-        body: refresh == null ? null : <String, Object?>{'refreshToken': refresh},
+        body: refresh == null
+            ? null
+            : <String, Object?>{'refreshToken': refresh},
       );
     } on Object {
       // Local credential destruction does not depend on network success.
@@ -348,6 +355,7 @@ final class SessionController extends ChangeNotifier {
     return base64Url.encode(bytes).replaceAll('=', '');
   }
 
-  static String _challengeFor(String value) =>
-      base64Url.encode(sha256.convert(ascii.encode(value)).bytes).replaceAll('=', '');
+  static String _challengeFor(String value) => base64Url
+      .encode(sha256.convert(ascii.encode(value)).bytes)
+      .replaceAll('=', '');
 }

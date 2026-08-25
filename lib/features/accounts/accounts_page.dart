@@ -65,13 +65,10 @@ class _AccountsPageState extends State<AccountsPage> {
                 ),
                 onChanged: (_) {
                   _debounce?.cancel();
-                  _debounce = Timer(
-                    const Duration(milliseconds: 350),
-                    () {
-                      _offset = 0;
-                      unawaited(_load());
-                    },
-                  );
+                  _debounce = Timer(const Duration(milliseconds: 350), () {
+                    _offset = 0;
+                    unawaited(_load());
+                  });
                 },
               ),
             ),
@@ -102,8 +99,7 @@ class _AccountsPageState extends State<AccountsPage> {
           ],
         ),
         const SizedBox(height: 16),
-        if (_hasError)
-          _ErrorBanner(retry: _load),
+        if (_hasError) _ErrorBanner(retry: _load),
         if (_loading) const LinearProgressIndicator(),
         const SizedBox(height: 8),
         Row(
@@ -131,7 +127,8 @@ class _AccountsPageState extends State<AccountsPage> {
             ),
             IconButton(
               tooltip: 'Next page',
-              onPressed: _loading ||
+              onPressed:
+                  _loading ||
                       _page == null ||
                       _offset + _page!.data.length >= _page!.total
                   ? null
@@ -460,9 +457,10 @@ final class _ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialBanner(
     content: const Text('The account list could not be loaded.'),
-    leading: Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
-    actions: <Widget>[
-      TextButton(onPressed: retry, child: const Text('Retry')),
-    ],
+    leading: Icon(
+      Icons.error_outline,
+      color: Theme.of(context).colorScheme.error,
+    ),
+    actions: <Widget>[TextButton(onPressed: retry, child: const Text('Retry'))],
   );
 }

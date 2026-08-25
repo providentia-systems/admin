@@ -20,4 +20,3 @@ ThemeData buildAdminTheme() {
     ),
   );
 }
-

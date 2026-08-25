@@ -143,8 +143,8 @@ class _LoginPageState extends State<LoginPage> {
 
   void _schedulePoll() {
     _pollTimer?.cancel();
-    final interval = widget.session.challenge?.pollInterval ??
-        const Duration(seconds: 3);
+    final interval =
+        widget.session.challenge?.pollInterval ?? const Duration(seconds: 3);
     _pollTimer = Timer.periodic(interval, (_) async {
       if (_busy || !mounted) return;
       _busy = true;

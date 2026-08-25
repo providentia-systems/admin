@@ -21,15 +21,16 @@ final class CatalogQueueItem {
 
     return CatalogQueueItem(
       id: firstString(const ['id', 'proposalId', 'contributionId'], 'unknown'),
-      revision: json['revision'] as int? ??
-          json['contributionRevision'] as int? ??
-          1,
+      revision:
+          json['revision'] as int? ?? json['contributionRevision'] as int? ?? 1,
       status: firstString(const ['status', 'decision'], 'pending'),
       kind: firstString(const ['kind', 'type', 'contributionType'], 'proposal'),
-      title: firstString(
-        const ['canonicalName', 'productName', 'submittedName', 'name'],
-        'Unnamed catalog item',
-      ),
+      title: firstString(const [
+        'canonicalName',
+        'productName',
+        'submittedName',
+        'name',
+      ], 'Unnamed catalog item'),
       raw: Map<String, Object?>.unmodifiable(json),
     );
   }
@@ -49,11 +50,12 @@ final class PublishedCategory {
     required this.revision,
   });
 
-  factory PublishedCategory.fromJson(Map<String, Object?> json) => PublishedCategory(
-    id: json['id']! as String,
-    canonicalName: json['canonicalName']! as String,
-    revision: json['revision']! as int,
-  );
+  factory PublishedCategory.fromJson(Map<String, Object?> json) =>
+      PublishedCategory(
+        id: json['id']! as String,
+        canonicalName: json['canonicalName']! as String,
+        revision: json['revision']! as int,
+      );
 
   final String id;
   final String canonicalName;
@@ -73,4 +75,3 @@ final class ModerationPreview {
 
   void dispose() => bytes.fillRange(0, bytes.length, 0);
 }
-

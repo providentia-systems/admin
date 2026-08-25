@@ -11,7 +11,7 @@ FLUTTER_ROOT="${TOOL_CACHE}/flutter-${FLUTTER_VERSION}"
 install_linux_packages() {
   local packages=(
     ca-certificates clang cmake curl git gzip jq libgtk-3-dev liblzma-dev
-    libsecret-1-dev ninja-build pkg-config ripgrep unzip xz-utils zip
+    libsecret-1-dev ninja-build nodejs pkg-config ripgrep unzip xz-utils zip
   )
   if ! command -v apt-get >/dev/null 2>&1; then
     echo "Unsupported host package manager. Install tools/agent-requirements.json manually." >&2
@@ -56,7 +56,7 @@ install_flutter() {
 }
 
 if [ "${1:-}" = "--check" ]; then
-  for command in curl git gzip sha256sum tar xz; do
+  for command in curl git gzip node sha256sum tar xz; do
     command -v "${command}" >/dev/null || {
       echo "Missing required command: ${command}" >&2
       exit 1
@@ -73,6 +73,7 @@ export XDG_CONFIG_HOME="${PROVIDENTIA_XDG_CONFIG_HOME:-${TOOL_CACHE}/xdg/config}
 export XDG_CACHE_HOME="${PROVIDENTIA_XDG_CACHE_HOME:-${TOOL_CACHE}/xdg/cache}"
 export XDG_DATA_HOME="${PROVIDENTIA_XDG_DATA_HOME:-${TOOL_CACHE}/xdg/data}"
 export ANALYZER_STATE_LOCATION_OVERRIDE="${PROVIDENTIA_ANALYZER_STATE_LOCATION:-${XDG_CACHE_HOME}/dart-analysis}"
+export DART_SUPPRESS_ANALYTICS="true"
 # Flutter otherwise probes the Azure instance metadata endpoint while trying
 # to infer whether it runs on a bot. Agent bootstrap is CI by definition, so
 # declare that explicitly and keep instance credentials outside its reach.
@@ -84,7 +85,7 @@ cd "${PROJECT_ROOT}"
 bash tool/materialize_contract.sh
 flutter config --no-analytics --enable-linux-desktop
 flutter precache --linux
-flutter pub get
+flutter pub get --enforce-lockfile
 
 cat > "${PROJECT_ROOT}/.agent-env" <<EOF
 export PATH="${FLUTTER_ROOT}/bin:\${PATH}"
@@ -93,6 +94,7 @@ export XDG_CONFIG_HOME="${XDG_CONFIG_HOME}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME}"
 export XDG_DATA_HOME="${XDG_DATA_HOME}"
 export ANALYZER_STATE_LOCATION_OVERRIDE="${ANALYZER_STATE_LOCATION_OVERRIDE}"
+export DART_SUPPRESS_ANALYTICS="${DART_SUPPRESS_ANALYTICS}"
 export CI="${CI}"
 export PROVIDENTIA_API_BASE_URL="${PROVIDENTIA_API_BASE_URL:-http://localhost:8080}"
 EOF

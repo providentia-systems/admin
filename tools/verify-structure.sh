@@ -21,6 +21,7 @@ test -f tools/agent-setup.sh
 bash tool/materialize_contract.sh
 bash -n tools/agent-setup.sh tool/install_flutter_linux.sh \
   tool/materialize_contract.sh \
+  tools/agent-check.sh \
   packaging/linux/build-packages.sh packaging/linux/AppRun \
   packaging/linux/providentia_admin
 
