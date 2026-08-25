@@ -22,10 +22,13 @@ final class SecureCredentialStore implements CredentialStore {
     'refreshToken',
     'sessionId',
     'deviceId',
+    'installationId',
     'userId',
     'accessExpiresAt',
     'refreshExpiresAt',
     'idleExpiresAt',
+    'refreshIdleTtlSeconds',
+    'transport',
   ];
   static const _pendingKeys = <String>[
     'requestId',

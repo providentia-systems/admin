@@ -31,6 +31,8 @@ Uri validateBackendUri(Uri uri) {
 
 typedef AccessTokenProvider = String? Function();
 typedef AuthorizationLostCallback = void Function();
+typedef EnsureAccessTokenCallback =
+    Future<bool> Function({required bool force});
 
 abstract interface class AdminApi {
   Future<ApiResponse> get(
@@ -39,6 +41,12 @@ abstract interface class AdminApi {
     Map<String, String>? headers,
   });
   Future<ApiResponse> post(
+    String path, {
+    Object? body,
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  });
+  Future<ApiResponse> postPublic(
     String path, {
     Object? body,
     Map<String, String>? query,
@@ -109,11 +117,13 @@ final class ApiClient implements AdminApi {
     required Uri baseUri,
     required http.Client httpClient,
     required AccessTokenProvider accessTokenProvider,
+    required EnsureAccessTokenCallback ensureAccessToken,
     required AuthorizationLostCallback onAuthorizationLost,
   }) => ApiClient._(
     baseUri,
     httpClient,
     accessTokenProvider,
+    ensureAccessToken,
     onAuthorizationLost,
   );
 
@@ -121,12 +131,14 @@ final class ApiClient implements AdminApi {
     this.baseUri,
     this._http,
     this._accessTokenProvider,
+    this._ensureAccessToken,
     this._onAuthorizationLost,
   );
 
   final Uri baseUri;
   final http.Client _http;
   final AccessTokenProvider _accessTokenProvider;
+  final EnsureAccessTokenCallback _ensureAccessToken;
   final AuthorizationLostCallback _onAuthorizationLost;
 
   @override
@@ -143,6 +155,24 @@ final class ApiClient implements AdminApi {
     Map<String, String>? query,
     Map<String, String>? headers,
   }) => request('POST', path, body: body, query: query, headers: headers);
+
+  @override
+  Future<ApiResponse> postPublic(
+    String path, {
+    Object? body,
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  }) async {
+    final response = await _send(
+      'POST',
+      path,
+      body: body,
+      query: query,
+      headers: headers,
+      authenticated: false,
+    );
+    return _complete(response, authorizationRequired: false);
+  }
 
   @override
   Future<ApiResponse> put(
@@ -172,7 +202,43 @@ final class ApiClient implements AdminApi {
     Map<String, String>? query,
     Map<String, String>? headers,
   }) async {
-    final token = _accessTokenProvider();
+    if (!await _ensureAccessToken(force: false)) {
+      _onAuthorizationLost();
+      throw const ApiException(
+        statusCode: 401,
+        message: 'The administrator session must be renewed.',
+      );
+    }
+    var response = await _send(
+      method,
+      path,
+      body: body,
+      query: query,
+      headers: headers,
+      authenticated: true,
+    );
+    if (response.statusCode == 401 && await _ensureAccessToken(force: true)) {
+      response = await _send(
+        method,
+        path,
+        body: body,
+        query: query,
+        headers: headers,
+        authenticated: true,
+      );
+    }
+    return _complete(response, authorizationRequired: true);
+  }
+
+  Future<ApiResponse> _send(
+    String method,
+    String path, {
+    Object? body,
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    required bool authenticated,
+  }) async {
+    final token = authenticated ? _accessTokenProvider() : null;
     final uri = baseUri
         .resolve(path)
         .replace(
@@ -209,16 +275,23 @@ final class ApiClient implements AdminApi {
       builder.add(chunk);
     }
     final bytes = builder.takeBytes();
-    final response = ApiResponse(
+    return ApiResponse(
       statusCode: streamed.statusCode,
       headers: streamed.headers,
       bytes: bytes,
     );
-    if (streamed.statusCode >= 200 && streamed.statusCode < 300) {
+  }
+
+  ApiResponse _complete(
+    ApiResponse response, {
+    required bool authorizationRequired,
+  }) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
       return response;
     }
 
-    if (streamed.statusCode == 401 || streamed.statusCode == 403) {
+    if (authorizationRequired &&
+        (response.statusCode == 401 || response.statusCode == 403)) {
       _onAuthorizationLost();
     }
     Map<String, Object?>? problem;
@@ -231,7 +304,7 @@ final class ApiClient implements AdminApi {
     final detail = problem?['detail'];
     final title = problem?['title'];
     throw ApiException(
-      statusCode: streamed.statusCode,
+      statusCode: response.statusCode,
       message: detail is String
           ? detail
           : title is String

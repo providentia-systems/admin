@@ -23,7 +23,13 @@ bash -n tools/agent-setup.sh tool/install_flutter_linux.sh \
   tool/materialize_contract.sh \
   tools/agent-check.sh \
   packaging/linux/build-packages.sh packaging/linux/AppRun \
-  packaging/linux/providentia_admin
+  packaging/linux/providentia_admin packaging/linux/debian-postinst \
+  packaging/linux/debian-postrm
+
+grep -Fqx 'Exec=providentia_admin %u' \
+  packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
+grep -Fqx 'MimeType=x-scheme-handler/providentia-admin;' \
+  packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
 
 for forbidden in android ios macos web windows; do
   if [ -d "${forbidden}" ]; then

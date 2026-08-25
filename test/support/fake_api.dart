@@ -57,6 +57,14 @@ final class FakeApi implements AdminApi {
   }) => _send('POST', path, body: body, query: query, headers: headers);
 
   @override
+  Future<ApiResponse> postPublic(
+    String path, {
+    Object? body,
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  }) => _send('POST', path, body: body, query: query, headers: headers);
+
+  @override
   Future<ApiResponse> put(
     String path, {
     Object? body,

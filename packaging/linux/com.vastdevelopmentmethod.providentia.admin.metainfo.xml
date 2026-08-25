@@ -8,6 +8,8 @@
   <description><p>Linux desktop administration for authorized Providentia operators.</p></description>
   <launchable type="desktop-id">com.vastdevelopmentmethod.providentia.admin.desktop</launchable>
   <developer_name>Vast Development Method</developer_name>
-  <provides><binary>providentia_admin</binary></provides>
+  <provides>
+    <binary>providentia_admin</binary>
+    <mediatype>x-scheme-handler/providentia-admin</mediatype>
+  </provides>
 </component>
-

@@ -24,6 +24,10 @@ cp -a "${BUNDLE}/." "${DEB_ROOT}/opt/providentia-admin/"
 install -m 0755 "${ROOT}/packaging/linux/providentia_admin" \
   "${DEB_ROOT}/usr/bin/providentia_admin"
 install -m 0644 "${ROOT}/packaging/linux/debian-control" "${DEB_ROOT}/DEBIAN/control"
+install -m 0755 "${ROOT}/packaging/linux/debian-postinst" \
+  "${DEB_ROOT}/DEBIAN/postinst"
+install -m 0755 "${ROOT}/packaging/linux/debian-postrm" \
+  "${DEB_ROOT}/DEBIAN/postrm"
 install -m 0644 "${ROOT}/packaging/linux/${APP_ID}.desktop" \
   "${DEB_ROOT}/usr/share/applications/${APP_ID}.desktop"
 install -m 0644 "${ROOT}/packaging/linux/${APP_ID}.svg" \
@@ -57,4 +61,3 @@ ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "${TOOL}" "${APPDIR}" \
 
 sha256sum "${OUTPUT}"/* > "${OUTPUT}/SHA256SUMS"
 echo "Linux packages written to ${OUTPUT}."
-
