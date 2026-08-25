@@ -11,6 +11,10 @@ import 'package:providentia_admin/core/auth/session_controller.dart';
 import 'package:providentia_admin/features/accounts/account_models.dart';
 import 'package:providentia_admin/features/accounts/account_repository.dart';
 import 'package:providentia_admin/features/accounts/accounts_page.dart';
+import 'package:providentia_admin/features/administrators/platform_administration_controller.dart';
+import 'package:providentia_admin/features/administrators/platform_administrator_models.dart';
+import 'package:providentia_admin/features/administrators/platform_administrator_repository.dart';
+import 'package:providentia_admin/features/administrators/platform_administrators_page.dart';
 import 'package:providentia_admin/features/auth/admin_approval_controller.dart';
 import 'package:providentia_admin/features/auth/admin_approval_page.dart';
 import 'package:providentia_admin/features/auth/admin_approval_port.dart';
@@ -43,6 +47,11 @@ void main() {
       OperatorAccountPage,
       AccountRepository,
       AccountsPage,
+      PlatformAdministrator,
+      PlatformAdministrationSnapshot,
+      PlatformAdministratorRepository,
+      PlatformAdministrationController,
+      PlatformAdministratorsPage,
       LoginPage,
       AdminApprovalController,
       AdminApprovalPhase,
@@ -60,7 +69,7 @@ void main() {
       CatalogRepository,
     ];
 
-    expect(productionTypes, hasLength(33));
+    expect(productionTypes, hasLength(38));
     expect(buildAdminTheme(), isA<ThemeData>());
     expect(admin_main.main, isA<Future<void> Function(List<String>)>());
   });
