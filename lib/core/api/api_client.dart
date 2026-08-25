@@ -7,6 +7,35 @@ import 'package:uuid/uuid.dart';
 typedef AccessTokenProvider = String? Function();
 typedef AuthorizationLostCallback = void Function();
 
+abstract interface class AdminApi {
+  Future<ApiResponse> get(
+    String path, {
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  });
+  Future<ApiResponse> post(
+    String path, {
+    Object? body,
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  });
+  Future<ApiResponse> put(
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+  });
+  Future<ApiResponse> patch(
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+  });
+  Future<ApiResponse> delete(
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+  });
+}
+
 final class ApiException implements Exception {
   const ApiException({
     required this.statusCode,
@@ -50,7 +79,7 @@ final class ApiResponse {
   }
 }
 
-final class ApiClient {
+final class ApiClient implements AdminApi {
   ApiClient({
     required this.baseUri,
     required http.Client httpClient,
@@ -156,4 +185,3 @@ final class ApiClient {
 
   void close() => _http.close();
 }
-
