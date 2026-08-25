@@ -48,6 +48,12 @@ does not print or persist them. The Flutter parser enforces the Admin scheme,
 host, path, application kind, request identifier and credential bounds before
 any network call.
 
+Production backend deployment must configure
+`ADMIN_APP_LINK_BASE=providentia-admin://login-link/admin`. The backend appends
+only the login-link fragment contract to this exact Linux-owned base. Do not
+substitute an HTTPS `/auth` page, a homeowner scheme or a shared credential
+namespace; Admin has no browser login surface.
+
 ## Validate
 
 ```bash

@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expectedDigest =
-  'aa207f0d9adbf2df36e1fd9c420d340da2bb2948a638c95f0610d40c1a0124fc';
+  'fb7f18cc8d2e0f7aaf3ec9f1bd3039316c6f44af0023110936778a8d616a6759';
 const contractBytes = await readFile(
   path.join(root, 'contracts', 'providentia-v1.json'),
 );
@@ -40,9 +40,9 @@ const generated = await readFile(
 );
 
 const digest = createHash('sha256').update(contractBytes).digest('hex');
-assert(digest === expectedDigest, 'OpenAPI digest drifted from backend 1.17.0.');
+assert(digest === expectedDigest, 'OpenAPI digest drifted from backend 1.18.0.');
 assert(contract.openapi === '3.1.0', 'OpenAPI version must be 3.1.0.');
-assert(contract.info?.version === '1.17.0', 'API version must be 1.17.0.');
+assert(contract.info?.version === '1.18.0', 'API version must be 1.18.0.');
 assert(Object.keys(contract.paths ?? {}).length === 154, 'Expected 154 API paths.');
 
 let operationCount = 0;
@@ -101,7 +101,7 @@ for (const schemaName of [
   );
 }
 
-process.stdout.write(`Admin contract verified: 1.17.0 / ${digest}.\n`);
+process.stdout.write(`Admin contract verified: 1.18.0 / ${digest}.\n`);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

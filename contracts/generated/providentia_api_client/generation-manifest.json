@@ -3,8 +3,8 @@
   "generatorVersion": 1,
   "repositoryRole": "linux-admin-client",
   "contract": "../../providentia-v1.json",
-  "contractVersion": "1.17.0",
-  "contractSha256": "aa207f0d9adbf2df36e1fd9c420d340da2bb2948a638c95f0610d40c1a0124fc",
+  "contractVersion": "1.18.0",
+  "contractSha256": "fb7f18cc8d2e0f7aaf3ec9f1bd3039316c6f44af0023110936778a8d616a6759",
   "operationCount": 47,
   "allowedOperationIds": [
     "applyCatalogMerge",

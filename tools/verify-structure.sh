@@ -61,6 +61,8 @@ grep -Fq 'PRODUCTION_API_BASE_URL' .github/workflows/release-linux.yml
 grep -Fq 'LINUX_SIGNING_KEY_BASE64' .github/workflows/release-linux.yml
 grep -Fq "PROVIDENTIA_LINUX_LAUNCH_SMOKE: 'true'" \
   .github/workflows/quality.yml .github/workflows/release-linux.yml
+grep -Fq 'ADMIN_APP_LINK_BASE=providentia-admin://login-link/admin' \
+  docs/development/agent-environment.md
 
 for forbidden in android ios macos web windows; do
   if [ -d "${forbidden}" ]; then
@@ -93,7 +95,7 @@ if grep -En '^[[:space:]]+(camera|drift|drift_flutter|file_picker|image_picker|s
   exit 1
 fi
 
-EXPECTED="aa207f0d9adbf2df36e1fd9c420d340da2bb2948a638c95f0610d40c1a0124fc"
+EXPECTED="fb7f18cc8d2e0f7aaf3ec9f1bd3039316c6f44af0023110936778a8d616a6759"
 ACTUAL="$(sha256sum contracts/providentia-v1.json | cut -d' ' -f1)"
 test "${ACTUAL}" = "${EXPECTED}"
 

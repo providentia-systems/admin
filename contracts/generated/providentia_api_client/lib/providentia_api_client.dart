@@ -1,6 +1,6 @@
 // GENERATED FILE - DO NOT EDIT.
 // Source: contracts/providentia-v1.json
-// Contract SHA-256: aa207f0d9adbf2df36e1fd9c420d340da2bb2948a638c95f0610d40c1a0124fc
+// Contract SHA-256: fb7f18cc8d2e0f7aaf3ec9f1bd3039316c6f44af0023110936778a8d616a6759
 // This facade deliberately excludes every household endpoint.
 
 library;
