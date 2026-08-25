@@ -18,9 +18,14 @@ test -f contracts/contract.lock.json
 test -f contracts/generated/providentia_api_client/lib/providentia_api_client.dart
 test -f tools/agent-requirements.json
 test -f tools/agent-setup.sh
+test -f tool/install_node_linux.sh
+test -f tool/test_installer_cache_health.sh
 test ! -f tool/generate_api_client.mjs
+test ! -f tool/verify_toolchain.mjs
 bash tool/materialize_contract.sh
 bash -n tools/agent-setup.sh tool/install_flutter_linux.sh \
+  tool/install_node_linux.sh \
+  tool/test_installer_cache_health.sh \
   tool/materialize_contract.sh \
   tools/agent-check.sh \
   packaging/linux/build-packages.sh packaging/linux/AppRun \

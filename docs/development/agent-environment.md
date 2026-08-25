@@ -18,6 +18,11 @@ source .agent-env
 The script installs the Linux desktop toolchain, downloads the pinned official
 Flutter archive, verifies its SHA-256 digest, prepares Linux artifacts, obtains
 packages and writes only non-secret session configuration to `.agent-env`.
+Node 22.14.0 is installed from its checksum-pinned official Linux x64 archive
+because contract generation and coverage enforcement are executable build
+inputs; the host distribution's moving `nodejs` package is not used. Both SDK
+installers stage replacements atomically, validate cached runtimes and repair a
+truncated or otherwise unhealthy cache instead of silently reusing it.
 Override `PROVIDENTIA_AGENT_CACHE` when the default repository-local cache is
 not durable. The cache and `.agent-env` are ignored by Git.
 

@@ -3,7 +3,8 @@
   "repositoryRole": "linux-admin-client",
   "runtime": {
     "flutter": "3.44.7",
-    "dart": "3.12.2"
+    "dart": "3.12.2",
+    "node": "22.14.0"
   },
   "flutterDownload": {
     "linuxX64": {
@@ -11,11 +12,18 @@
       "sha256": "a0edd646c159c0e816788c0e46a4f071199c1320495898f5a679599b583a05a4"
     }
   },
+  "nodeDownload": {
+    "linuxX64": {
+      "url": "https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.xz",
+      "sha256": "69b09dba5c8dcb05c4e4273a4340db1005abeafe3927efda2bc5b249e80437ec"
+    }
+  },
   "linux": {
     "aptPackages": [
       "ca-certificates",
       "clang",
       "cmake",
+      "coreutils",
       "curl",
       "git",
       "gzip",
@@ -24,7 +32,6 @@
       "liblzma-dev",
       "libsecret-1-dev",
       "ninja-build",
-      "nodejs",
       "pkg-config",
       "ripgrep",
       "unzip",
@@ -40,6 +47,7 @@
     "objects.githubusercontent.com",
     "codeload.github.com",
     "raw.githubusercontent.com",
+    "nodejs.org",
     "storage.googleapis.com",
     "pub.dev",
     "api.pub.dev"
