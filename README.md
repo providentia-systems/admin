@@ -7,6 +7,12 @@ repository.
 
 The application uses the backend's native login-link authentication protocol
 and an Admin-specific installation, device, session and Linux keyring namespace.
+Linux registers `providentia-admin://` as an application-owned URI scheme. A
+login approval credential arrives only in the URI fragment, is decoded into an
+ephemeral buffer, and is overwritten immediately after approve, deny or error.
+Approval review and decision use JSON API routes; Admin never renders a backend
+HTML login page. Rotating refresh credentials are persisted atomically, shared
+by one in-flight refresh, and never activated in memory if keyring storage fails.
 Backend platform roles select the available workspaces:
 
 - platform administrators inspect privacy-safe account and home-membership
@@ -45,6 +51,8 @@ lane. The canonical backend contract is frozen under `contracts/openapi/`.
 - Moderation previews require WebP, `Cache-Control: no-store`, bounded bytes and
   a matching `X-Content-SHA256`; preview buffers are overwritten on disposal.
 - Secrets never enter source, logs, analytics or the homeowner-client keyring.
+- Admin rejects homeowner application links, non-Admin session bindings and
+  every household API route before privileged state can be displayed.
 
 This repository contains proprietary Providentia product source. The owner has
 authorized development through public branches and draft pull requests; this

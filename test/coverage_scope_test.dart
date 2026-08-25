@@ -4,12 +4,16 @@ import 'package:providentia_admin/app/admin_shell.dart';
 import 'package:providentia_admin/app/providentia_admin_app.dart';
 import 'package:providentia_admin/app/theme.dart';
 import 'package:providentia_admin/core/api/api_client.dart';
+import 'package:providentia_admin/core/auth/admin_approval_link.dart';
 import 'package:providentia_admin/core/auth/credential_store.dart';
 import 'package:providentia_admin/core/auth/operator_authorization.dart';
 import 'package:providentia_admin/core/auth/session_controller.dart';
 import 'package:providentia_admin/features/accounts/account_models.dart';
 import 'package:providentia_admin/features/accounts/account_repository.dart';
 import 'package:providentia_admin/features/accounts/accounts_page.dart';
+import 'package:providentia_admin/features/auth/admin_approval_controller.dart';
+import 'package:providentia_admin/features/auth/admin_approval_page.dart';
+import 'package:providentia_admin/features/auth/admin_approval_port.dart';
 import 'package:providentia_admin/features/auth/login_page.dart';
 import 'package:providentia_admin/features/billing/billing_page.dart';
 import 'package:providentia_admin/features/billing/billing_repository.dart';
@@ -27,6 +31,7 @@ void main() {
       ApiException,
       ApiResponse,
       SecureCredentialStore,
+      AdminApprovalLink,
       PlatformRole,
       OperatorCapability,
       OperatorAuthorization,
@@ -39,6 +44,12 @@ void main() {
       AccountRepository,
       AccountsPage,
       LoginPage,
+      AdminApprovalController,
+      AdminApprovalPhase,
+      AdminApprovalPage,
+      AdminApprovalProof,
+      AdminApprovalReview,
+      HttpAdminLoginApprovalPort,
       BillingPage,
       BillingPlan,
       BillingRepository,
@@ -49,8 +60,8 @@ void main() {
       CatalogRepository,
     ];
 
-    expect(productionTypes, hasLength(26));
+    expect(productionTypes, hasLength(33));
     expect(buildAdminTheme(), isA<ThemeData>());
-    expect(admin_main.main, isA<Future<void> Function()>());
+    expect(admin_main.main, isA<Future<void> Function(List<String>)>());
   });
 }

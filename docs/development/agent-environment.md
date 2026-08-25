@@ -25,6 +25,14 @@ Cloud sandboxes must allow the hosts listed in
 `tools/agent-requirements.json`. Runtime access is limited to the configured
 HTTPS backend origin. No PayPal or AI provider network access belongs in Admin.
 
+The Linux desktop package registers `providentia-admin://` for application-owned
+login approvals. Development and test links must carry approval credentials in
+the URI fragment, never the query string. The native runner forwards accepted
+links through the isolated `providentia.admin.application_links` channel and
+does not print or persist them. The Flutter parser enforces the Admin scheme,
+host, path, application kind, request identifier and credential bounds before
+any network call.
+
 ## Validate
 
 ```bash
