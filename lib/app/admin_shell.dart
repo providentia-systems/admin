@@ -4,6 +4,7 @@ import '../core/api/api_client.dart';
 import '../core/auth/operator_authorization.dart';
 import '../core/auth/session_controller.dart';
 import '../features/accounts/accounts_page.dart';
+import '../features/administrators/platform_administrators_page.dart';
 import '../features/billing/billing_page.dart';
 import '../features/catalog/catalog_page.dart';
 
@@ -36,6 +37,12 @@ class _AdminShellState extends State<AdminShell> {
   Widget build(BuildContext context) {
     final authorization = widget.session.authorization;
     final destinations = <_Destination>[
+      if (authorization.allows(OperatorCapability.manageAdministrators))
+        _Destination(
+          label: 'Administrators',
+          icon: Icons.admin_panel_settings_outlined,
+          page: PlatformAdministratorsPage(api: widget.api),
+        ),
       if (authorization.allows(OperatorCapability.manageAccounts))
         _Destination(
           label: 'Accounts',
