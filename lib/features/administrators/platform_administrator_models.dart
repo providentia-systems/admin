@@ -1,5 +1,7 @@
 import 'dart:collection';
 
+import '../../core/security/secure_id.dart';
+
 enum PlatformAdministratorStatus { pending, active }
 
 final class PlatformAdministrator {
@@ -10,9 +12,7 @@ final class PlatformAdministrator {
     required this.revision,
     required this.createdAt,
   }) {
-    if (!_uuidPattern.hasMatch(id) ||
-        !_emailPattern.hasMatch(email) ||
-        revision < 1) {
+    if (!isUuid(id) || !_emailPattern.hasMatch(email) || revision < 1) {
       throw const FormatException('Platform administrator data was malformed.');
     }
   }
@@ -65,7 +65,4 @@ final class PlatformAdministrationSnapshot {
   final String? safeMessage;
 }
 
-final RegExp _uuidPattern = RegExp(
-  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
-);
 final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');

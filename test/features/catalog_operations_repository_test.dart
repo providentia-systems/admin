@@ -6,12 +6,12 @@ import 'package:providentia_admin/features/catalog/published_product_picker.dart
 
 import '../support/fake_api.dart';
 
-const productId = '11111111-1111-4111-8111-111111111111';
-const duplicateId = '22222222-2222-4222-8222-222222222222';
-const categoryId = '33333333-3333-4333-8333-333333333333';
-const iconId = '44444444-4444-4444-8444-444444444444';
-const conflictId = '55555555-5555-4555-8555-555555555555';
-const mergeId = '66666666-6666-4666-8666-666666666666';
+const productId = '0198f4e1-7abc-7def-8abc-0123456789ab';
+const duplicateId = '0198f4e2-7abc-7def-8abc-0123456789ab';
+const categoryId = '0198f4e3-7abc-7def-8abc-0123456789ab';
+const iconId = '0198f4e4-7abc-7def-8abc-0123456789ab';
+const conflictId = '0198f4e5-7abc-7def-8abc-0123456789ab';
+const mergeId = '0198f4e6-7abc-7def-8abc-0123456789ab';
 const digest =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 

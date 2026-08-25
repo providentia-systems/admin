@@ -61,10 +61,10 @@ final class MemoryCredentialStore implements CredentialStore {
 Map<String, String> storedSession() => <String, String>{
   'accessToken': 'access-token',
   'refreshToken': 'refresh-token',
-  'sessionId': '11111111-1111-4111-8111-111111111111',
+  'sessionId': '0198f4e2-7abc-7def-8abc-0123456789ab',
   'deviceId': '22222222-2222-4222-8222-222222222222',
   'installationId': installationId,
-  'userId': '33333333-3333-4333-8333-333333333333',
+  'userId': '0198f4e3-7abc-7def-8abc-0123456789ab',
   'accessExpiresAt': '2026-09-01T00:00:00Z',
   'refreshExpiresAt': '2026-10-01T00:00:00Z',
   'idleExpiresAt': '2026-10-01T00:00:00Z',
