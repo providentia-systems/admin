@@ -12,37 +12,47 @@ if [[ $# -ne 1 ]]; then
 fi
 
 install_parent=$1
-if [[ -e "$install_parent/flutter" ]]; then
-  echo "Refusing to overwrite existing path: $install_parent/flutter" >&2
-  exit 73
+if [[ -z "$install_parent" || "$install_parent" == '/' ]]; then
+  echo 'Refusing unsafe Flutter installation parent.' >&2
+  exit 64
+fi
+
+target="$install_parent/flutter"
+if [[ -x "$target/bin/flutter" && -f "$target/version" ]] &&
+  [[ "$(tr -d '\r\n' < "$target/version" 2>/dev/null)" == "$VERSION" ]]; then
+  echo "Using verified Flutter $VERSION at $target"
+  exit 0
 fi
 
 mkdir -p "$install_parent"
-download_directory=$(mktemp -d)
+download_directory=$(mktemp -d "$install_parent/.flutter-install.XXXXXX")
+trap 'rm -rf -- "$download_directory"' EXIT
 archive_path="$download_directory/$ARCHIVE"
-curl --fail --location --retry 3 --output "$archive_path" \
+curl --fail --location --retry 3 --output "$archive_path.part" \
   "$BASE_URL/stable/linux/$ARCHIVE"
-printf '%s  %s\n' "$SHA256" "$archive_path" | sha256sum --check --status
-tar --no-same-owner --extract --xz --file "$archive_path" --directory "$install_parent"
+printf '%s  %s\n' "$SHA256" "$archive_path.part" |
+  sha256sum --check --status
+mv "$archive_path.part" "$archive_path"
+tar --no-same-owner --extract --xz --file "$archive_path" \
+  --directory "$download_directory"
+candidate="$download_directory/flutter"
 
-actual_version=$(
-  CI=true \
-    PUB_CACHE="$download_directory/pub-cache" \
-    XDG_CONFIG_HOME="$download_directory/xdg/config" \
-    XDG_CACHE_HOME="$download_directory/xdg/cache" \
-    XDG_DATA_HOME="$download_directory/xdg/data" \
-    "$install_parent/flutter/bin/flutter" --version --machine |
-    node -e '
-      let input = "";
-      process.stdin.on("data", chunk => input += chunk);
-      process.stdin.on("end", () => {
-        const value = JSON.parse(input);
-        process.stdout.write(value.flutterVersion ?? value.frameworkVersion ?? "");
-      });
-    '
-)
+actual_version=$(tr -d '\r\n' < "$candidate/version")
 if [[ "$actual_version" != "$VERSION" ]]; then
   echo "Expected Flutter $VERSION, found $actual_version." >&2
   exit 65
 fi
-echo "Installed verified Flutter $VERSION at $install_parent/flutter"
+
+previous="$download_directory/previous-flutter"
+if [[ -e "$target" || -L "$target" ]]; then
+  mv "$target" "$previous"
+fi
+if ! mv "$candidate" "$target"; then
+  if [[ -e "$previous" || -L "$previous" ]]; then
+    mv "$previous" "$target"
+  fi
+  exit 73
+fi
+rm -rf -- "$previous"
+
+echo "Installed verified Flutter $VERSION at $target"
