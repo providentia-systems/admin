@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Providentia Admin
+Comment=Providentia operator control plane
+Exec=providentia_admin
+Icon=com.vastdevelopmentmethod.providentia.admin
+Terminal=false
+Categories=Utility;System;
+StartupNotify=true
+StartupWMClass=com.vastdevelopmentmethod.providentia.admin
+

@@ -24,6 +24,9 @@ Uri validateBackendUri(Uri uri) {
       'The backend base URL cannot contain credentials, query, or fragment.',
     );
   }
+  if (uri.path.isNotEmpty && uri.path != '/') {
+    throw const FormatException('The backend base URL cannot contain a path.');
+  }
   return uri;
 }
 

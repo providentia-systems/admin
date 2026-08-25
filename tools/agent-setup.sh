@@ -35,12 +35,22 @@ install_flutter() {
   fi
   mkdir -p "${TOOL_CACHE}"
   local archive="${TOOL_CACHE}/flutter-${FLUTTER_VERSION}.tar.xz"
-  curl --fail --location --retry 3 --output "${archive}" "${FLUTTER_URL}"
-  echo "${FLUTTER_SHA256}  ${archive}" | sha256sum --check --status
+  if ! echo "${FLUTTER_SHA256}  ${archive}" | sha256sum --check --status 2>/dev/null; then
+    local partial="${archive}.part"
+    rm -f "${partial}"
+    curl --fail --location --retry 3 --output "${partial}" "${FLUTTER_URL}"
+    echo "${FLUTTER_SHA256}  ${partial}" | sha256sum --check --status
+    mv "${partial}" "${archive}"
+  else
+    echo "Using verified cached Flutter ${FLUTTER_VERSION} archive."
+  fi
   local extract="${TOOL_CACHE}/extract-${FLUTTER_VERSION}"
   rm -rf "${extract}"
   mkdir -p "${extract}"
-  tar -xJf "${archive}" -C "${extract}"
+  # Cloud workspaces commonly reject the numeric uid/gid stored in Flutter's
+  # release archive.  Extract as the current agent user so bootstrap remains
+  # portable across restricted containers and ordinary developer machines.
+  tar --extract --xz --no-same-owner --file "${archive}" --directory "${extract}"
   mv "${extract}/flutter" "${FLUTTER_ROOT}"
   rmdir "${extract}"
 }
@@ -59,7 +69,14 @@ install_flutter
 
 export PATH="${FLUTTER_ROOT}/bin:${PATH}"
 export PUB_CACHE="${PROVIDENTIA_PUB_CACHE:-${TOOL_CACHE}/pub-cache}"
-mkdir -p "${PUB_CACHE}"
+export XDG_CONFIG_HOME="${PROVIDENTIA_XDG_CONFIG_HOME:-${TOOL_CACHE}/xdg/config}"
+export XDG_CACHE_HOME="${PROVIDENTIA_XDG_CACHE_HOME:-${TOOL_CACHE}/xdg/cache}"
+export XDG_DATA_HOME="${PROVIDENTIA_XDG_DATA_HOME:-${TOOL_CACHE}/xdg/data}"
+# Flutter otherwise probes the Azure instance metadata endpoint while trying
+# to infer whether it runs on a bot. Agent bootstrap is CI by definition, so
+# declare that explicitly and keep instance credentials outside its reach.
+export CI="${CI:-true}"
+mkdir -p "${PUB_CACHE}" "${XDG_CONFIG_HOME}" "${XDG_CACHE_HOME}" "${XDG_DATA_HOME}"
 
 cd "${PROJECT_ROOT}"
 flutter config --no-analytics --enable-linux-desktop
@@ -69,6 +86,10 @@ flutter pub get
 cat > "${PROJECT_ROOT}/.agent-env" <<EOF
 export PATH="${FLUTTER_ROOT}/bin:\${PATH}"
 export PUB_CACHE="${PUB_CACHE}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME}"
+export XDG_DATA_HOME="${XDG_DATA_HOME}"
+export CI="${CI}"
 export PROVIDENTIA_API_BASE_URL="${PROVIDENTIA_API_BASE_URL:-http://localhost:8080}"
 EOF
 

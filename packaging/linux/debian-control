@@ -1,0 +1,10 @@
+Package: providentia-admin
+Version: 0.1.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Vast Development Method
+Depends: libgtk-3-0, libsecret-1-0
+Description: Providentia authorized operator control plane
+ Linux desktop administration for authorized Providentia operators.
+

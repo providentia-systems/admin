@@ -4,9 +4,9 @@
 .packages
 .pub-cache/
 .agent-env
+.agent-tools*/
 build/
 coverage/
 linux/flutter/ephemeral/
 *.iml
 *.log
-
