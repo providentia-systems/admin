@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../../core/security/secure_id.dart';
+
 final class CatalogQueueItem {
   const CatalogQueueItem({
     required this.id,
@@ -49,7 +51,7 @@ final class PublishedCategory {
     required this.canonicalName,
     required this.revision,
   }) {
-    if (!_uuidPattern.hasMatch(id) ||
+    if (!isUuid(id) ||
         canonicalName.trim().isEmpty ||
         canonicalName.length > 191 ||
         revision < 1) {
@@ -75,10 +77,6 @@ final class PublishedCategory {
   final String canonicalName;
   final int revision;
 }
-
-final RegExp _uuidPattern = RegExp(
-  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
-);
 
 final class ModerationPreview {
   ModerationPreview({
