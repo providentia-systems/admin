@@ -16,9 +16,13 @@ enum AdminAccountActionPhase {
 }
 
 final class AdminAccountActionController extends ChangeNotifier {
-  AdminAccountActionController(this._port);
+  AdminAccountActionController(
+    this._port, {
+    required this.passwordResetSessionBoundary,
+  });
 
   final AdminAccountActionPort _port;
+  final AdminPasswordResetSessionBoundary passwordResetSessionBoundary;
   AdminAccountLink? _link;
   AdminAccountActionPhase _phase = AdminAccountActionPhase.idle;
   int _generation = 0;
@@ -73,8 +77,12 @@ final class AdminAccountActionController extends ChangeNotifier {
     notifyListeners();
     try {
       await _port.completePasswordReset(token: link.token, password: password);
-      if (!_isCurrent(generation, link)) return;
-      _clearLink();
+      // A successful reset invalidates every server session. Local revocation
+      // must therefore happen even when this page was dismissed while the
+      // response was in flight; UI generation only controls the final view.
+      if (_isCurrent(generation, link)) _clearLink();
+      await passwordResetSessionBoundary.revokeAfterPasswordReset();
+      if (generation != _generation) return;
       _phase = AdminAccountActionPhase.resetComplete;
       notifyListeners();
     } on Object {

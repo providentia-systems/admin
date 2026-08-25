@@ -185,6 +185,36 @@ void main() {
     expect(controller.authorizationEpoch, epoch + 1);
   });
 
+  test(
+    'password-reset completion revokes memory and both keyring tuples',
+    () async {
+      final store = MemoryCredentialStore()
+        ..installationId = installationId
+        ..session = storedSession()
+        ..pending = <String, String>{'requestId': 'pending-secret'};
+      final api = FakeApi(
+        (_) async => jsonResponse(<String, Object?>{
+          'userId': storedSession()['userId'],
+          'platformRoles': <Object?>['platform_administrator'],
+        }),
+      );
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      final epoch = controller.authorizationEpoch;
+
+      final purge = controller.revokeAfterPasswordReset();
+
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(controller.accessToken, isNull);
+      expect(controller.authorization.isOperator, isFalse);
+      expect(controller.authorizationEpoch, epoch + 1);
+      await purge;
+      expect(store.session, isEmpty);
+      expect(store.pending, isEmpty);
+      expect(store.clears, 1);
+    },
+  );
+
   test('partial secure tuple is purged instead of restored', () async {
     final store = MemoryCredentialStore()
       ..installationId = installationId
