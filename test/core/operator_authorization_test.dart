@@ -12,7 +12,10 @@ void main() {
       ]);
 
       expect(authorization.roles, hasLength(4));
-      expect(authorization.capabilities, containsAll(OperatorCapability.values));
+      expect(
+        authorization.capabilities,
+        containsAll(OperatorCapability.values),
+      );
     });
 
     test('ignores unknown roles rather than broadening access', () {
@@ -41,7 +44,10 @@ void main() {
         'platform_administrator',
       ]);
 
-      expect(authorization.capabilities, containsAll(OperatorCapability.values));
+      expect(
+        authorization.capabilities,
+        containsAll(OperatorCapability.values),
+      );
     });
 
     test('curator may review and curate but not manage accounts', () {

@@ -29,7 +29,9 @@ final class OperatorAccount {
           : const <String>[],
       homes: homes is List<Object?>
           ? List<OperatorHome>.unmodifiable(
-              homes.whereType<Map<String, Object?>>().map(OperatorHome.fromJson),
+              homes.whereType<Map<String, Object?>>().map(
+                OperatorHome.fromJson,
+              ),
             )
           : const <OperatorHome>[],
     );
@@ -95,9 +97,9 @@ final class OperatorAccountPage {
     return OperatorAccountPage(
       data: data is List<Object?>
           ? List<OperatorAccount>.unmodifiable(
-              data
-                  .whereType<Map<String, Object?>>()
-                  .map(OperatorAccount.fromJson),
+              data.whereType<Map<String, Object?>>().map(
+                OperatorAccount.fromJson,
+              ),
             )
           : const <OperatorAccount>[],
       limit: page['limit'] as int? ?? 50,

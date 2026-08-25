@@ -16,5 +16,5 @@ OpenAPI lock before changing runtime behavior.
   second catalog publication or role store.
 - Update backend runtime and contract first, then copy the exact contract and
   lock here. Handwritten endpoint drift is rejected by CI.
-- Run every command in the validation list before declaring work complete.
-
+- Run `bash tools/agent-check.sh` before declaring work complete. It is the
+  canonical format, contract, analysis, test, coverage and Linux release gate.

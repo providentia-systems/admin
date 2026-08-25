@@ -58,11 +58,15 @@ final class OperatorAuthorization {
     );
   }
 
-  static const none = OperatorAuthorization._(<PlatformRole>{}, <OperatorCapability>{});
+  static const none = OperatorAuthorization._(
+    <PlatformRole>{},
+    <OperatorCapability>{},
+  );
 
   final Set<PlatformRole> roles;
   final Set<OperatorCapability> capabilities;
 
-  bool allows(OperatorCapability capability) => capabilities.contains(capability);
+  bool allows(OperatorCapability capability) =>
+      capabilities.contains(capability);
   bool get isOperator => capabilities.isNotEmpty;
 }

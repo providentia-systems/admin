@@ -8,9 +8,8 @@ import '../security/secure_id.dart';
 const _maximumResponseBytes = 8 * 1024 * 1024;
 
 Uri validateBackendUri(Uri uri) {
-  final local = uri.host == 'localhost' ||
-      uri.host == '127.0.0.1' ||
-      uri.host == '::1';
+  final local =
+      uri.host == 'localhost' || uri.host == '127.0.0.1' || uri.host == '::1';
   if (!uri.hasScheme || !uri.hasAuthority || uri.host.isEmpty) {
     throw const FormatException('The backend base URL must be absolute.');
   }
@@ -106,26 +105,38 @@ final class ApiResponse {
 }
 
 final class ApiClient implements AdminApi {
-  ApiClient({
-    required this.baseUri,
+  factory ApiClient({
+    required Uri baseUri,
     required http.Client httpClient,
     required AccessTokenProvider accessTokenProvider,
     required AuthorizationLostCallback onAuthorizationLost,
-  }) : _http = httpClient,
-       _accessTokenProvider = accessTokenProvider,
-       _onAuthorizationLost = onAuthorizationLost;
+  }) => ApiClient._(
+    baseUri,
+    httpClient,
+    accessTokenProvider,
+    onAuthorizationLost,
+  );
+
+  ApiClient._(
+    this.baseUri,
+    this._http,
+    this._accessTokenProvider,
+    this._onAuthorizationLost,
+  );
 
   final Uri baseUri;
   final http.Client _http;
   final AccessTokenProvider _accessTokenProvider;
   final AuthorizationLostCallback _onAuthorizationLost;
 
+  @override
   Future<ApiResponse> get(
     String path, {
     Map<String, String>? query,
     Map<String, String>? headers,
   }) => request('GET', path, query: query, headers: headers);
 
+  @override
   Future<ApiResponse> post(
     String path, {
     Object? body,
@@ -133,18 +144,21 @@ final class ApiClient implements AdminApi {
     Map<String, String>? headers,
   }) => request('POST', path, body: body, query: query, headers: headers);
 
+  @override
   Future<ApiResponse> put(
     String path, {
     Object? body,
     Map<String, String>? headers,
   }) => request('PUT', path, body: body, headers: headers);
 
+  @override
   Future<ApiResponse> patch(
     String path, {
     Object? body,
     Map<String, String>? headers,
   }) => request('PATCH', path, body: body, headers: headers);
 
+  @override
   Future<ApiResponse> delete(
     String path, {
     Object? body,
@@ -159,9 +173,11 @@ final class ApiClient implements AdminApi {
     Map<String, String>? headers,
   }) async {
     final token = _accessTokenProvider();
-    final uri = baseUri.resolve(path).replace(
-      queryParameters: query == null || query.isEmpty ? null : query,
-    );
+    final uri = baseUri
+        .resolve(path)
+        .replace(
+          queryParameters: query == null || query.isEmpty ? null : query,
+        );
     final request = http.Request(method, uri);
     request.headers.addAll(<String, String>{
       'Accept': 'application/json',
@@ -177,14 +193,18 @@ final class ApiClient implements AdminApi {
     final streamed = await _http.send(request);
     final declaredLength = streamed.contentLength;
     if (declaredLength != null && declaredLength > _maximumResponseBytes) {
-      throw const FormatException('The server response exceeded the safety limit.');
+      throw const FormatException(
+        'The server response exceeded the safety limit.',
+      );
     }
     final builder = BytesBuilder(copy: false);
     var received = 0;
     await for (final chunk in streamed.stream) {
       received += chunk.length;
       if (received > _maximumResponseBytes) {
-        throw const FormatException('The server response exceeded the safety limit.');
+        throw const FormatException(
+          'The server response exceeded the safety limit.',
+        );
       }
       builder.add(chunk);
     }

@@ -88,4 +88,3 @@ ApiResponse jsonResponse(Map<String, Object?> body, {int status = 200}) =>
       headers: const <String, String>{'content-type': 'application/json'},
       bytes: Uint8List.fromList(utf8.encode(jsonEncode(body))),
     );
-

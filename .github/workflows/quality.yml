@@ -47,6 +47,9 @@ jobs:
       - name: Test
         run: flutter test --coverage
 
+      - name: Enforce handwritten production coverage ratchet
+        run: node tool/check_coverage.mjs
+
       - name: Produce dependency inventory
         run: |
           mkdir -p build/compliance

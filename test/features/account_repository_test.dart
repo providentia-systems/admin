@@ -29,10 +29,7 @@ void main() {
     );
     final repository = AccountRepository(api);
 
-    final page = await repository.list(
-      search: 'operator',
-      status: 'active',
-    );
+    final page = await repository.list(search: 'operator', status: 'active');
 
     expect(page.data.single.email, 'operator@example.test');
     expect(page.total, 1);
@@ -55,14 +52,11 @@ void main() {
     final request = api.requests.single;
     expect(request.method, 'PATCH');
     expect(request.path, endsWith('/status'));
-    expect(
-      request.body,
-      <String, Object?>{
-        'status': 'suspended',
-        'reason': 'Security review required',
-        'expectedRevision': 3,
-      },
-    );
+    expect(request.body, <String, Object?>{
+      'status': 'suspended',
+      'reason': 'Security review required',
+      'expectedRevision': 3,
+    });
   });
 
   test('role grant and revoke share canonical revision-bound route', () async {
@@ -88,4 +82,3 @@ void main() {
     expect(api.requests[1].body, <String, Object?>{'expectedRevision': 4});
   });
 }
-

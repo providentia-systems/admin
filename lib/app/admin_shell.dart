@@ -50,12 +50,8 @@ class _AdminShellState extends State<AdminShell> {
           page: CatalogPage(
             api: widget.api,
             session: widget.session,
-            canReview: authorization.allows(
-              OperatorCapability.reviewCatalog,
-            ),
-            canCurate: authorization.allows(
-              OperatorCapability.curateCatalog,
-            ),
+            canReview: authorization.allows(OperatorCapability.reviewCatalog),
+            canCurate: authorization.allows(OperatorCapability.curateCatalog),
           ),
         ),
       if (authorization.allows(OperatorCapability.viewBilling))
