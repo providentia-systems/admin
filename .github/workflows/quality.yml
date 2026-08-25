@@ -30,7 +30,7 @@ jobs:
 
       - name: Install pinned Flutter SDK
         run: |
-          tool/install_flutter_linux.sh "$RUNNER_TEMP/providentia-sdk"
+          bash tool/install_flutter_linux.sh "$RUNNER_TEMP/providentia-sdk"
           echo "$RUNNER_TEMP/providentia-sdk/flutter/bin" >> "$GITHUB_PATH"
 
       - name: Resolve locked dependencies
@@ -81,7 +81,7 @@ jobs:
 
       - name: Install pinned Flutter SDK
         run: |
-          tool/install_flutter_linux.sh "$RUNNER_TEMP/providentia-sdk"
+          bash tool/install_flutter_linux.sh "$RUNNER_TEMP/providentia-sdk"
           echo "$RUNNER_TEMP/providentia-sdk/flutter/bin" >> "$GITHUB_PATH"
 
       - name: Build Linux release
@@ -100,4 +100,3 @@ jobs:
           path: build/packages
           if-no-files-found: error
           retention-days: 14
-

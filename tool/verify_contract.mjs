@@ -57,11 +57,14 @@ assert(
   'Backend contract lock digest does not match.',
 );
 assert(manifest.contractSha256 === expectedDigest, 'Generated manifest drifted.');
-assert(manifest.operationCount === 174, 'Generated operation count drifted.');
+assert(manifest.repositoryRole === 'linux-admin-client', 'Generated facade role drifted.');
+assert(manifest.operationCount === 40, 'Generated Admin operation count drifted.');
 assert(
   generated.includes(`// Contract SHA-256: ${expectedDigest}`),
   'Generated Dart client is not bound to this contract.',
 );
+assert(!generated.includes('/api/v1/homes'), 'Generated Admin client exposes homes.');
+assert(!generated.includes('stock'), 'Generated Admin client exposes stock.');
 
 for (const [method, resource, operationId] of [
   ['post', '/api/v1/auth/login-links', 'startLoginLink'],

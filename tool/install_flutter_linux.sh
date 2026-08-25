@@ -26,7 +26,11 @@ printf '%s  %s\n' "$SHA256" "$archive_path" | sha256sum --check --status
 tar --no-same-owner --extract --xz --file "$archive_path" --directory "$install_parent"
 
 actual_version=$(
-  CI=true PUB_CACHE="$download_directory/pub-cache" \
+  CI=true \
+    PUB_CACHE="$download_directory/pub-cache" \
+    XDG_CONFIG_HOME="$download_directory/xdg/config" \
+    XDG_CACHE_HOME="$download_directory/xdg/cache" \
+    XDG_DATA_HOME="$download_directory/xdg/data" \
     "$install_parent/flutter/bin/flutter" --version --machine |
     node -e '
       let input = "";
@@ -42,4 +46,3 @@ if [[ "$actual_version" != "$VERSION" ]]; then
   exit 65
 fi
 echo "Installed verified Flutter $VERSION at $install_parent/flutter"
-
