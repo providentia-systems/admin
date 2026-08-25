@@ -5,12 +5,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
 test -f pubspec.yaml
-test -f contracts/providentia-v1.json
+test -f contracts/source/providentia-v1.json.gz
 test -f contracts/contract.lock.json
 test -f contracts/generated/providentia_api_client/lib/providentia_api_client.dart
 test -f tools/agent-requirements.json
 test -f tools/agent-setup.sh
+bash tool/materialize_contract.sh
 bash -n tools/agent-setup.sh tool/install_flutter_linux.sh \
+  tool/materialize_contract.sh \
   packaging/linux/build-packages.sh packaging/linux/AppRun \
   packaging/linux/providentia_admin
 

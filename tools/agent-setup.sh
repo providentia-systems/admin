@@ -10,7 +10,7 @@ FLUTTER_ROOT="${TOOL_CACHE}/flutter-${FLUTTER_VERSION}"
 
 install_linux_packages() {
   local packages=(
-    ca-certificates clang cmake curl git jq libgtk-3-dev liblzma-dev
+    ca-certificates clang cmake curl git gzip jq libgtk-3-dev liblzma-dev
     libsecret-1-dev ninja-build pkg-config ripgrep unzip xz-utils zip
   )
   if ! command -v apt-get >/dev/null 2>&1; then
@@ -56,7 +56,7 @@ install_flutter() {
 }
 
 if [ "${1:-}" = "--check" ]; then
-  for command in curl git sha256sum tar xz; do
+  for command in curl git gzip sha256sum tar xz; do
     command -v "${command}" >/dev/null || {
       echo "Missing required command: ${command}" >&2
       exit 1
@@ -79,6 +79,7 @@ export CI="${CI:-true}"
 mkdir -p "${PUB_CACHE}" "${XDG_CONFIG_HOME}" "${XDG_CACHE_HOME}" "${XDG_DATA_HOME}"
 
 cd "${PROJECT_ROOT}"
+bash tool/materialize_contract.sh
 flutter config --no-analytics --enable-linux-desktop
 flutter precache --linux
 flutter pub get
