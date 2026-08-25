@@ -33,6 +33,13 @@ The same manifest declares Debian packaging, GnuPG, D-Bus and Xvfb so an agent
 can build packages, validate native linkage and boot the real Flutter bundle
 without relying on a maintainer workstation.
 
+The Linux-only dependency graph deliberately overrides
+`path_provider_android` to 2.2.23. Its 2.3.x line introduces Android JNI native
+assets through Flutter's cross-platform resolver and can make a Linux bundle
+depend on whether the build host happens to expose a JDK. The lock, generated
+plugin list, CMake configuration and packaged-artifact verifier all reject JNI;
+do not remove this pin until the upstream Linux graph is demonstrably JNI-free.
+
 The Linux desktop package registers `providentia-admin://` for application-owned
 login approvals. Development and test links must carry approval credentials in
 the URI fragment, never the query string. The native runner forwards accepted
