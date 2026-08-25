@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../security/secure_id.dart';
+
 final class AdminApprovalLink {
   AdminApprovalLink._(this.requestId, this._approvalBytes);
 
@@ -52,9 +54,7 @@ AdminApprovalLink parseAdminApprovalLink(Uri uri) {
   }
 
   final requestId = parameters['requestId']!;
-  if (!RegExp(
-    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
-  ).hasMatch(requestId)) {
+  if (!isUuid(requestId)) {
     throw const FormatException(
       'Admin login request identifier was malformed.',
     );

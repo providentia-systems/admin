@@ -73,7 +73,7 @@ final class SessionController extends ChangeNotifier {
     notifyListeners();
     try {
       _installationId = await _credentialStore.readInstallationId();
-      if (_installationId == null || !_isUuid(_installationId!)) {
+      if (_installationId == null || !isUuid(_installationId!)) {
         _installationId = newUuidV4();
         await _credentialStore.writeInstallationId(_installationId!);
       }
@@ -402,7 +402,7 @@ final class SessionController extends ChangeNotifier {
     final json = response.jsonObject;
     final bootstrapUserId = json['userId'];
     if (bootstrapUserId is! String ||
-        !_isUuid(bootstrapUserId) ||
+        !isUuid(bootstrapUserId) ||
         bootstrapUserId != _userId) {
       await _purgeSession(
         'The administrator identity binding could not be verified.',
@@ -484,7 +484,7 @@ final class SessionController extends ChangeNotifier {
       final codeVerifier = values['codeVerifier']!;
       final state = values['state']!;
       final now = DateTime.now().toUtc();
-      if (!_isUuid(requestId) ||
+      if (!isUuid(requestId) ||
           !_isBase64UrlSecret(pollToken, minimum: 43, maximum: 128) ||
           !_isBase64UrlSecret(codeVerifier, minimum: 43, maximum: 128) ||
           !_isBase64UrlSecret(state, minimum: 32, maximum: 256) ||
@@ -577,7 +577,7 @@ final class SessionController extends ChangeNotifier {
       'installationId',
       'userId',
     ]) {
-      if (!_isUuid(values[key]!)) {
+      if (!isUuid(values[key]!)) {
         throw const FormatException('Session identifier was malformed.');
       }
     }
@@ -637,10 +637,6 @@ final class SessionController extends ChangeNotifier {
     };
     return required.every((key) => values[key]?.isNotEmpty ?? false);
   }
-
-  static bool _isUuid(String value) => RegExp(
-    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
-  ).hasMatch(value);
 
   static bool _isBase64UrlSecret(
     String value, {

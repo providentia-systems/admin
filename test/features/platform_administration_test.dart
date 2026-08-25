@@ -10,7 +10,7 @@ import 'package:providentia_admin/features/administrators/platform_administrator
 import '../support/fake_api.dart';
 
 const _administratorJson = <String, Object?>{
-  'id': '11111111-1111-4111-8111-111111111111',
+  'id': '0198f4e2-7abc-7def-8abc-0123456789ab',
   'email': 'admin@example.test',
   'status': 'active',
   'revision': 4,
@@ -18,7 +18,7 @@ const _administratorJson = <String, Object?>{
 };
 
 PlatformAdministrator _administrator({
-  String id = '11111111-1111-4111-8111-111111111111',
+  String id = '0198f4e2-7abc-7def-8abc-0123456789ab',
   String email = 'admin@example.test',
   PlatformAdministratorStatus status = PlatformAdministratorStatus.active,
   int revision = 4,
@@ -104,7 +104,7 @@ void main() {
       expect(
         api.requests.single.path,
         '/api/v1/platform/administrators/'
-        '11111111-1111-4111-8111-111111111111/revoke',
+        '0198f4e2-7abc-7def-8abc-0123456789ab/revoke',
       );
       expect(api.requests.single.body, <String, Object?>{
         'expectedRevision': 4,
@@ -225,7 +225,7 @@ void main() {
     testWidgets('confirms a revision-bound revoke', (tester) async {
       final first = _administrator();
       final second = _administrator(
-        id: '22222222-2222-4222-8222-222222222222',
+        id: '0198f4e3-7abc-7def-8abc-0123456789ab',
         email: 'second@example.test',
         revision: 6,
       );

@@ -1,4 +1,5 @@
 import '../../core/api/api_client.dart';
+import '../../core/security/secure_id.dart';
 import 'catalog_models.dart';
 import 'catalog_operations_models.dart';
 
@@ -360,7 +361,7 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
       left.length == right.length && left.toSet().containsAll(right);
 
   static void _requireUuid(String value, String name) {
-    if (!_uuidPattern.hasMatch(value)) {
+    if (!isUuid(value)) {
       throw CatalogOperationsFailure(
         kind: CatalogOperationsFailureKind.validation,
         safeMessage: 'The $name identity was not valid.',
@@ -368,7 +369,3 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
     }
   }
 }
-
-final RegExp _uuidPattern = RegExp(
-  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
-);
