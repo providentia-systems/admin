@@ -77,9 +77,11 @@ void main() {
       BillingPlan,
       BillingRepository,
       CatalogQueueItem,
+      StorePriceModeration,
       PublishedCategory,
       ModerationPreview,
       CatalogPage,
+      CatalogModerationDetail,
       CatalogRepository,
       PublishedProduct,
       PublishedProductPage,
@@ -97,7 +99,7 @@ void main() {
       PublishedProductPickerDialog,
     ];
 
-    expect(productionTypes, hasLength(58));
+    expect(productionTypes, hasLength(60));
     expect(buildAdminTheme(), isA<ThemeData>());
     expect(admin_main.main, isA<Future<void> Function(List<String>)>());
   });

@@ -197,7 +197,7 @@ class _CatalogPageState extends State<CatalogPage> {
                                   'Select a moderation item to review it.',
                                 ),
                               )
-                            : _ModerationDetail(
+                            : CatalogModerationDetail(
                                 item: _selected!,
                                 isContribution:
                                     _lane == _CatalogLane.contributions,
@@ -433,8 +433,9 @@ class _CatalogPageState extends State<CatalogPage> {
       : 'The moderation operation was rejected (HTTP ${error.statusCode}).';
 }
 
-final class _ModerationDetail extends StatelessWidget {
-  const _ModerationDetail({
+@visibleForTesting
+final class CatalogModerationDetail extends StatelessWidget {
+  const CatalogModerationDetail({
     required this.item,
     required this.isContribution,
     required this.canReview,
@@ -444,6 +445,7 @@ final class _ModerationDetail extends StatelessWidget {
     required this.onPreview,
     required this.onLinkProposal,
     required this.onPublishImage,
+    super.key,
   });
 
   final CatalogQueueItem item;
@@ -458,8 +460,12 @@ final class _ModerationDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageContribution =
-        isContribution && item.kind.toLowerCase().contains('image');
+    final productIdentityContribution =
+        isContribution && item.isProductIdentityContribution;
+    final imageContribution = isContribution && item.isProductImageContribution;
+    final storePriceContribution =
+        isContribution && item.isStorePriceContribution;
+    final storePrice = item.storePrice;
     final approvedContribution = isContribution && item.status == 'approved';
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -476,11 +482,16 @@ final class _ModerationDetail extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         for (final entry in item.raw.entries)
-          if (!_sensitiveKey(entry.key))
+          if (!_sensitiveKey(entry.key) &&
+              !(entry.key == 'payload' && item.storePrice != null))
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
               child: SelectableText('${entry.key}: ${entry.value}'),
             ),
+        if (storePriceContribution && storePrice != null) ...<Widget>[
+          const Divider(height: 32),
+          _StorePriceModerationView(price: storePrice),
+        ],
         if (imageContribution) ...<Widget>[
           const Divider(height: 32),
           if (preview == null)
@@ -505,16 +516,18 @@ final class _ModerationDetail extends StatelessWidget {
           ],
         ],
         const Divider(height: 32),
-        if (canReview)
+        if (canReview && item.status == 'pending')
           Wrap(
             spacing: 8,
             children: <Widget>[
               FilledButton.icon(
+                key: const Key('approve-moderation-item'),
                 onPressed: () => onDecision(true),
                 icon: const Icon(Icons.check),
                 label: const Text('Approve'),
               ),
               OutlinedButton.icon(
+                key: const Key('reject-moderation-item'),
                 onPressed: () => onDecision(false),
                 icon: const Icon(Icons.close),
                 label: const Text('Reject'),
@@ -527,21 +540,38 @@ final class _ModerationDetail extends StatelessWidget {
             'Curator publication actions become available only after the current contribution revision is approved.',
           ),
         ],
-        if (isContribution && canCurate && approvedContribution) ...<Widget>[
+        if (isContribution &&
+            canCurate &&
+            approvedContribution &&
+            (productIdentityContribution || imageContribution)) ...<Widget>[
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             children: <Widget>[
-              OutlinedButton(
-                onPressed: onLinkProposal,
-                child: const Text('Link product proposal'),
-              ),
+              if (productIdentityContribution)
+                OutlinedButton(
+                  key: const Key('link-product-proposal'),
+                  onPressed: onLinkProposal,
+                  child: const Text('Link product proposal'),
+                ),
               if (imageContribution)
                 FilledButton.tonal(
+                  key: const Key('publish-verified-image'),
                   onPressed: preview == null ? null : onPublishImage,
                   child: const Text('Publish verified image'),
                 ),
             ],
+          ),
+        ],
+        if (storePriceContribution &&
+            canCurate &&
+            approvedContribution) ...<Widget>[
+          const SizedBox(height: 12),
+          const Text(
+            'This approved store-price fact is published by the consent-bound '
+            'contribution feed. It does not create a product proposal or '
+            'replace a product image.',
+            key: Key('store-price-publication-boundary'),
           ),
         ],
       ],
@@ -557,4 +587,33 @@ final class _ModerationDetail extends StatelessWidget {
         normalized.contains('userid') ||
         normalized.contains('providerreference');
   }
+}
+
+final class _StorePriceModerationView extends StatelessWidget {
+  const _StorePriceModerationView({required this.price});
+
+  final StorePriceModeration price;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    label: 'Store-price moderation details',
+    child: Column(
+      key: const Key('store-price-moderation-details'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'Shared store-price fact',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        SelectableText('Store: ${price.storeName}'),
+        SelectableText('Location: ${price.storeLocation ?? 'Not supplied'}'),
+        SelectableText('Price: ${price.currency} ${price.price}'),
+        SelectableText('Observed on: ${price.observedOn}'),
+        SelectableText('Product ID: ${price.productId}'),
+        SelectableText('Pack ID: ${price.packId}'),
+      ],
+    ),
+  );
 }
