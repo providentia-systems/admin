@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "repositoryRole": "linux-admin-client",
+  "runtime": {
+    "flutter": "3.47.1",
+    "dart": "3.13.1"
+  },
+  "flutterDownload": {
+    "linuxX64": {
+      "url": "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.47.1-stable.tar.xz",
+      "sha256": "a1d8166c0309267cb7dc99f1424eecf08b86946ad3b50723c6f59945964aea45"
+    }
+  },
+  "linux": {
+    "aptPackages": [
+      "ca-certificates",
+      "clang",
+      "cmake",
+      "curl",
+      "git",
+      "jq",
+      "libgtk-3-dev",
+      "liblzma-dev",
+      "libsecret-1-dev",
+      "ninja-build",
+      "pkg-config",
+      "ripgrep",
+      "unzip",
+      "xz-utils",
+      "zip"
+    ]
+  },
+  "networkAllowlist": [
+    "archive.ubuntu.com",
+    "security.ubuntu.com",
+    "github.com",
+    "api.github.com",
+    "objects.githubusercontent.com",
+    "codeload.github.com",
+    "raw.githubusercontent.com",
+    "storage.googleapis.com",
+    "pub.dev",
+    "api.pub.dev"
+  ],
+  "runtimeNetwork": [
+    "the configured PROVIDENTIA_API_URL over HTTPS"
+  ],
+  "validation": [
+    "dart format --output=none --set-exit-if-changed .",
+    "flutter analyze",
+    "flutter test --coverage",
+    "bash tools/verify-structure.sh",
+    "flutter build linux --release"
+  ]
+}
+

@@ -1,0 +1,20 @@
+# Contributor contract
+
+Read `README.md`, `docs/development/agent-environment.md`, and the authoritative
+OpenAPI lock before changing runtime behavior.
+
+- Admin is a separate Linux-only Flutter client. Do not add household-client
+  platforms or reuse homeowner storage, database, installation, or credentials.
+- The backend owns authorization and domain rules. UI visibility is defense in
+  depth; every privileged request must remain backend-authorized.
+- A 401 or 403 from a privileged request must synchronously purge navigation,
+  cached privileged state and capabilities before asynchronous cleanup.
+- Admin may display only privacy-safe account metadata and subscription summary.
+  Never add household stock, prices, receipts, purchases, locations, notes,
+  reports, private AI media, credentials, or provider references.
+- Preserve revision-bound mutations and reload after conflicts. Do not invent a
+  second catalog publication or role store.
+- Update backend runtime and contract first, then copy the exact contract and
+  lock here. Handwritten endpoint drift is rejected by CI.
+- Run every command in the validation list before declaring work complete.
+
