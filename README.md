@@ -13,6 +13,11 @@ ephemeral buffer, and is overwritten immediately after approve, deny or error.
 Approval review and decision use JSON API routes; Admin never renders a backend
 HTML login page. Rotating refresh credentials are persisted atomically, shared
 by one in-flight refresh, and never activated in memory if keyring storage fails.
+The production backend must set
+`ADMIN_APP_LINK_BASE=providentia-admin://login-link/admin`. That exact
+Linux-owned base is distinct from homeowner links; an HTTPS web-auth base is
+not an Admin application link and is rejected.
+
 Backend platform roles select the available workspaces:
 
 - platform administrators inspect privacy-safe account and home-membership
