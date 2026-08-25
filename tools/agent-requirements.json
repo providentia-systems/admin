@@ -25,16 +25,25 @@
       "cmake",
       "coreutils",
       "curl",
+      "dbus-x11",
+      "desktop-file-utils",
+      "dpkg-dev",
       "git",
+      "gnupg",
       "gzip",
       "jq",
+      "libegl1",
+      "libgles2",
+      "libgtk-3-0",
       "libgtk-3-dev",
       "liblzma-dev",
+      "libsecret-1-0",
       "libsecret-1-dev",
       "ninja-build",
       "pkg-config",
       "ripgrep",
       "unzip",
+      "xvfb",
       "xz-utils",
       "zip"
     ]
@@ -63,6 +72,7 @@
   },
   "validation": [
     "bash tool/materialize_contract.sh",
-    "bash tools/agent-check.sh"
+    "bash tools/agent-check.sh",
+    "PROVIDENTIA_LINUX_LAUNCH_SMOKE=true bash tool/verify_linux_deb.sh build/packages/providentia-admin_0.1.0-dev_amd64.deb"
   ]
 }

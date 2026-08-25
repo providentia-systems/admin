@@ -29,6 +29,9 @@ not durable. The cache and `.agent-env` are ignored by Git.
 Cloud sandboxes must allow the hosts listed in
 `tools/agent-requirements.json`. Runtime access is limited to the configured
 HTTPS backend origin. No PayPal or AI provider network access belongs in Admin.
+The same manifest declares Debian packaging, GnuPG, D-Bus and Xvfb so an agent
+can build packages, validate native linkage and boot the real Flutter bundle
+without relying on a maintainer workstation.
 
 The Linux desktop package registers `providentia-admin://` for application-owned
 login approvals. Development and test links must carry approval credentials in
@@ -45,8 +48,18 @@ bash tools/agent-check.sh
 ```
 
 Use `--check` to skip host-package installation when the image already contains
-the declared packages. CI runs the same commands and publishes installable
-artifacts from the release bundle.
+the declared packages. The canonical check builds the Linux release, produces
+DEB/AppImage/tar packages, validates every bundled native library and runs a
+15-second D-Bus/Xvfb launch smoke. Pull-request CI repeats the DEB validation
+after installing it on a fresh Ubuntu job.
+
+Protected Linux releases run from an exact `vVERSION` tag or a manual workflow
+dispatch. The production backend origin is supplied only through the protected
+`PRODUCTION_API_BASE_URL` variable and compiled with
+`PROVIDENTIA_API_BASE_URL`; it is never committed. Tag publication requires
+`LINUX_SIGNING_KEY_BASE64`, `LINUX_SIGNING_KEY_ID` and
+`LINUX_SIGNING_PASSPHRASE`. Missing signing configuration blocks publication,
+while a manual `publish=false` dispatch can still prove the unsigned candidate.
 
 Never place access tokens, refresh tokens, backend credentials, provider keys,
 or production URLs in repository files or build logs. Native credentials are

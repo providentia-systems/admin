@@ -94,7 +94,7 @@ void main() {
     },
   );
 
-  test('restore bootstraps capabilities from backend roles', () async {
+  test('Admin bootstrap accepts an operator account with no home', () async {
     final store = MemoryCredentialStore()
       ..installationId = installationId
       ..session = storedSession();
@@ -102,6 +102,8 @@ void main() {
       (_) async => jsonResponse(<String, Object?>{
         'userId': 'user-id',
         'platformRoles': <Object?>['catalog_reviewer'],
+        'activeHomeId': null,
+        'homes': <Object?>[],
       }),
     );
     final controller = SessionController(api: api, credentialStore: store);

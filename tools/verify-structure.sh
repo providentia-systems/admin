@@ -20,12 +20,19 @@ test -f tools/agent-requirements.json
 test -f tools/agent-setup.sh
 test -f tool/install_node_linux.sh
 test -f tool/test_installer_cache_health.sh
+test -f tool/test_linux_release_scripts.sh
+test -f tool/verify_linux_deb.sh
+test -f tool/sign_linux_artifacts.sh
+test -f .github/workflows/release-linux.yml
 test ! -f tool/generate_api_client.mjs
 test ! -f tool/verify_toolchain.mjs
 bash tool/materialize_contract.sh
 bash -n tools/agent-setup.sh tool/install_flutter_linux.sh \
   tool/install_node_linux.sh \
   tool/test_installer_cache_health.sh \
+  tool/test_linux_release_scripts.sh \
+  tool/verify_linux_deb.sh \
+  tool/sign_linux_artifacts.sh \
   tool/materialize_contract.sh \
   tools/agent-check.sh \
   packaging/linux/build-packages.sh packaging/linux/AppRun \
@@ -36,6 +43,13 @@ grep -Fqx 'Exec=providentia_admin %u' \
   packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
 grep -Fqx 'MimeType=x-scheme-handler/providentia-admin;' \
   packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
+grep -Fq "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093" \
+  .github/workflows/quality.yml .github/workflows/release-linux.yml
+grep -Fq 'environment: production-release' .github/workflows/release-linux.yml
+grep -Fq 'PRODUCTION_API_BASE_URL' .github/workflows/release-linux.yml
+grep -Fq 'LINUX_SIGNING_KEY_BASE64' .github/workflows/release-linux.yml
+grep -Fq "PROVIDENTIA_LINUX_LAUNCH_SMOKE: 'true'" \
+  .github/workflows/quality.yml .github/workflows/release-linux.yml
 
 for forbidden in android ios macos web windows; do
   if [ -d "${forbidden}" ]; then

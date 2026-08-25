@@ -94,8 +94,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            clang cmake curl dpkg-dev libgtk-3-dev liblzma-dev \
-            libsecret-1-dev ninja-build pkg-config
+            clang cmake curl dpkg-dev libegl1 libgles2 libgtk-3-dev \
+            liblzma-dev libsecret-1-dev ninja-build pkg-config
+
+      - name: Test Linux release gates
+        run: bash tool/test_linux_release_scripts.sh
 
       - name: Install pinned Flutter SDK
         run: |
@@ -118,3 +121,41 @@ jobs:
           path: build/packages
           if-no-files-found: error
           retention-days: 14
+
+  linux-package-smoke:
+    name: Clean-host Debian install and launch
+    needs: linux-release-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out verification source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: providentia-admin-linux
+          path: build/packages
+
+      - name: Install clean-host smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            dbus-x11 desktop-file-utils xvfb
+
+      - name: Verify checksums and install Debian package
+        run: |
+          (cd build/packages && sha256sum --check SHA256SUMS)
+          deb="$(find build/packages -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$deb"
+          sudo apt-get install -y --no-install-recommends "$(realpath "$deb")"
+          dpkg-query --show --showformat='${Status}\n' providentia-admin \
+            | grep -Fqx 'install ok installed'
+
+      - name: Verify native linkage and launch under Xvfb
+        env:
+          PROVIDENTIA_LINUX_INSTALLED_BINARY: /usr/bin/providentia_admin
+          PROVIDENTIA_LINUX_LAUNCH_SMOKE: 'true'
+        run: |
+          deb="$(find build/packages -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          bash tool/verify_linux_deb.sh "$deb"

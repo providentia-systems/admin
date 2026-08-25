@@ -43,6 +43,14 @@ pinned toolchain, host dependencies, network allowlist and complete validation
 lane. The canonical backend contract is checksum-pinned under
 `contracts/source/` and materialized only for validation and generation.
 
+Pull-request CI builds the release bundle, produces checksum-pinned DEB,
+AppImage and tar artifacts, installs the DEB on a fresh Ubuntu runner, verifies
+every native library, and proves that the installed application remains alive
+under D-Bus and Xvfb. `.github/workflows/release-linux.yml` provides the
+protected tag/manual release lane. Manual dry runs remain unsigned; publishing
+fails closed unless the exact tag, HTTPS production API origin and protected
+Linux signing credentials are present.
+
 ## Security invariants
 
 - All runtime operations go through the backend API; there is no database or
