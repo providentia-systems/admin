@@ -36,6 +36,10 @@ jobs:
 
       - name: Install pinned Flutter SDK
         run: |
+          mkdir -p "$RUNNER_TEMP/providentia-sdk/flutter/bin"
+          printf '#!/bin/sh\nexit 99\n' > \
+            "$RUNNER_TEMP/providentia-sdk/flutter/bin/flutter"
+          chmod 0755 "$RUNNER_TEMP/providentia-sdk/flutter/bin/flutter"
           bash tool/install_flutter_linux.sh "$RUNNER_TEMP/providentia-sdk"
           echo "$RUNNER_TEMP/providentia-sdk/flutter/bin" >> "$GITHUB_PATH"
 
@@ -80,6 +84,11 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Install pinned Node runtime
+        run: |
+          bash tool/install_node_linux.sh "$RUNNER_TEMP/providentia-node"
+          echo "$RUNNER_TEMP/providentia-node/node/bin" >> "$GITHUB_PATH"
 
       - name: Install Linux build dependencies
         run: |
