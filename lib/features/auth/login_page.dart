@@ -212,11 +212,28 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     setState(() => _busy = true);
-    if (reset) {
-      await widget.accountActions.requestPasswordReset(email);
-    } else {
-      await widget.accountActions.resendVerification(email);
+    try {
+      if (reset) {
+        await widget.accountActions.requestPasswordReset(email);
+      } else {
+        await widget.accountActions.resendVerification(email);
+      }
+      if (mounted &&
+          widget.accountActions.phase == AdminAccountActionPhase.failed) {
+        _showAccountMessageError();
+      }
+    } on Object {
+      if (mounted) _showAccountMessageError();
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    if (mounted) setState(() => _busy = false);
+  }
+
+  void _showAccountMessageError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('The account message could not be requested safely.'),
+      ),
+    );
   }
 }

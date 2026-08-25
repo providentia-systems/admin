@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:providentia_admin/core/auth/credential_store.dart';
+import 'package:providentia_admin/core/auth/session_controller.dart';
 import 'package:providentia_admin/features/auth/admin_account_action_controller.dart';
 import 'package:providentia_admin/features/auth/admin_account_action_page.dart';
 import 'package:providentia_admin/features/auth/admin_account_action_port.dart';
+import 'package:providentia_admin/features/auth/login_page.dart';
 
 import '../support/admin_approval_fixture.dart';
 import '../support/fake_api.dart';
@@ -28,6 +31,52 @@ final class _FakeAccountActionPort implements AdminAccountActionPort {
 
   @override
   Future<void> verifyEmail(String token) async => verifications.add(token);
+}
+
+final class _FailingAccountActionPort implements AdminAccountActionPort {
+  @override
+  Future<void> completePasswordReset({
+    required String token,
+    required String password,
+  }) async => throw StateError('transport detail');
+
+  @override
+  Future<void> requestPasswordReset(String email) async =>
+      throw StateError('transport detail');
+
+  @override
+  Future<void> resendVerification(String email) async =>
+      throw StateError('transport detail');
+
+  @override
+  Future<void> verifyEmail(String token) async =>
+      throw StateError('transport detail');
+}
+
+final class _EmptyCredentialStore implements CredentialStore {
+  @override
+  Future<void> clearPendingLogin() async {}
+
+  @override
+  Future<void> clearSession() async {}
+
+  @override
+  Future<String?> readInstallationId() async => null;
+
+  @override
+  Future<Map<String, String>> readPendingLogin() async => <String, String>{};
+
+  @override
+  Future<Map<String, String>> readSession() async => <String, String>{};
+
+  @override
+  Future<void> writeInstallationId(String value) async {}
+
+  @override
+  Future<void> writePendingLogin(Map<String, String> values) async {}
+
+  @override
+  Future<void> writeSession(Map<String, String> values) async {}
 }
 
 Uri _accountLink(String action) => Uri.parse(
@@ -111,5 +160,35 @@ void main() {
     expect(port.resets.single.$1, approvalToken);
     expect(controller.phase, AdminAccountActionPhase.resetComplete);
     expect(controller.hasEphemeralCredential, isFalse);
+  });
+
+  testWidgets('failed account-message request clears busy state safely', (
+    tester,
+  ) async {
+    final accountActions = AdminAccountActionController(
+      _FailingAccountActionPort(),
+    );
+    final session = SessionController(
+      api: FakeApi((_) async => throw StateError('must not call API')),
+      credentialStore: _EmptyCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LoginPage(session: session, accountActions: accountActions),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), 'operator@example.test');
+
+    await tester.tap(find.byKey(const Key('request-admin-password-reset')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('The account message could not be requested safely.'),
+      findsOneWidget,
+    );
+    final button = tester.widget<TextButton>(
+      find.byKey(const Key('request-admin-password-reset')),
+    );
+    expect(button.onPressed, isNotNull);
   });
 }

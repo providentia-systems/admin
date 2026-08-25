@@ -17,6 +17,8 @@ final class MemoryCredentialStore implements CredentialStore {
   var clears = 0;
   var failWrites = false;
   var failClears = false;
+  Completer<void>? sessionWriteBarrier;
+  Completer<void>? sessionWriteStarted;
 
   @override
   Future<void> clearSession() async {
@@ -44,6 +46,9 @@ final class MemoryCredentialStore implements CredentialStore {
   @override
   Future<void> writeSession(Map<String, String> values) async {
     if (failWrites) throw StateError('keyring unavailable');
+    final started = sessionWriteStarted;
+    if (started != null && !started.isCompleted) started.complete();
+    await sessionWriteBarrier?.future;
     session = Map.of(values);
   }
 
@@ -94,13 +99,34 @@ void main() {
     },
   );
 
+  test('restore replaces a malformed installation identifier', () async {
+    final store = MemoryCredentialStore()..installationId = 'not-a-uuid';
+    final controller = SessionController(
+      api: FakeApi((_) async => throw StateError('must not call API')),
+      credentialStore: store,
+    );
+
+    await controller.restore();
+
+    expect(controller.phase, SessionPhase.signedOut);
+    expect(store.installationId, isNot('not-a-uuid'));
+    expect(
+      store.installationId,
+      matches(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        ),
+      ),
+    );
+  });
+
   test('Admin bootstrap accepts an operator account with no home', () async {
     final store = MemoryCredentialStore()
       ..installationId = installationId
       ..session = storedSession();
     final api = FakeApi(
       (_) async => jsonResponse(<String, Object?>{
-        'userId': 'user-id',
+        'userId': storedSession()['userId'],
         'platformRoles': <Object?>['catalog_reviewer'],
         'activeHomeId': null,
         'homes': <Object?>[],
@@ -124,7 +150,7 @@ void main() {
       ..session = storedSession();
     final api = FakeApi(
       (_) async => jsonResponse(<String, Object?>{
-        'userId': 'user-id',
+        'userId': storedSession()['userId'],
         'platformRoles': <Object?>['home_owner'],
       }),
     );
@@ -143,7 +169,7 @@ void main() {
       ..session = storedSession();
     final api = FakeApi(
       (_) async => jsonResponse(<String, Object?>{
-        'userId': 'user-id',
+        'userId': storedSession()['userId'],
         'platformRoles': <Object?>['platform_administrator'],
       }),
     );
@@ -395,6 +421,369 @@ void main() {
       expect(startBody['transport'], 'native');
       expect(controller.phase, SessionPhase.loginPending);
       expect(store.pending['requestId'], isNotEmpty);
+    },
+  );
+
+  test(
+    'approved login binds status and exchange credentials end to end',
+    () async {
+      final store = MemoryCredentialStore()..installationId = installationId;
+      late String requestId;
+      late String expiresAt;
+      late Map<String, Object?> startBody;
+      late Map<String, Object?> exchangeBody;
+      final api = FakeApi((request) async {
+        if (request.path == '/api/v1/auth/login-links') {
+          startBody = request.body! as Map<String, Object?>;
+          requestId = startBody['requestId']! as String;
+          expiresAt = DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 10))
+              .toIso8601String();
+          return jsonResponse(<String, Object?>{
+            'accepted': true,
+            'requestId': requestId,
+            'expiresAt': expiresAt,
+            'pollIntervalSeconds': 2,
+          });
+        }
+        if (request.path.endsWith('/status')) {
+          return jsonResponse(<String, Object?>{
+            'requestId': requestId,
+            'applicationKind': 'admin',
+            'status': 'approved',
+            'expiresAt': expiresAt,
+          });
+        }
+        if (request.path.endsWith('/exchange')) {
+          exchangeBody = request.body! as Map<String, Object?>;
+          return jsonResponse(<String, Object?>{
+            ...rotatedSession(),
+            'activeHomeId': null,
+          });
+        }
+        if (request.path == '/api/v1/me') {
+          return jsonResponse(<String, Object?>{
+            'userId': storedSession()['userId'],
+            'platformRoles': <Object?>['catalog_reviewer'],
+            'activeHomeId': null,
+            'homes': <Object?>[],
+          });
+        }
+        throw StateError('unexpected ${request.path}');
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+
+      await controller.startLoginLink('operator@example.test');
+      final challenge = controller.challenge!;
+      expect(await controller.pollLoginLink(), isTrue);
+
+      expect(startBody['applicationKind'], 'admin');
+      expect(exchangeBody, <String, Object?>{
+        'pollToken': challenge.pollToken,
+        'codeVerifier': challenge.codeVerifier,
+        'state': challenge.state,
+      });
+      expect(controller.phase, SessionPhase.authenticated);
+      expect(controller.userId, storedSession()['userId']);
+      expect(controller.challenge, isNull);
+      expect(store.pending, isEmpty);
+      expect(store.session['refreshToken'], 'rotated-refresh-token');
+    },
+  );
+
+  test(
+    'cross-installation exchange purges the pending credential tuple',
+    () async {
+      final store = MemoryCredentialStore()..installationId = installationId;
+      late String requestId;
+      late String expiresAt;
+      final api = FakeApi((request) async {
+        if (request.path == '/api/v1/auth/login-links') {
+          requestId =
+              (request.body! as Map<String, Object?>)['requestId']! as String;
+          expiresAt = DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 10))
+              .toIso8601String();
+          return jsonResponse(<String, Object?>{
+            'accepted': true,
+            'requestId': requestId,
+            'expiresAt': expiresAt,
+            'pollIntervalSeconds': 2,
+          });
+        }
+        if (request.path.endsWith('/status')) {
+          return jsonResponse(<String, Object?>{
+            'requestId': requestId,
+            'applicationKind': 'admin',
+            'status': 'approved',
+            'expiresAt': expiresAt,
+          });
+        }
+        if (request.path.endsWith('/exchange')) {
+          return jsonResponse(<String, Object?>{
+            ...rotatedSession(),
+            'installationId': '55555555-5555-4555-8555-555555555555',
+          });
+        }
+        throw StateError('unexpected ${request.path}');
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      await controller.startLoginLink('operator@example.test');
+
+      await expectLater(controller.pollLoginLink(), throwsFormatException);
+
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(controller.accessToken, isNull);
+      expect(store.session, isEmpty);
+      expect(store.pending, isEmpty);
+    },
+  );
+
+  test(
+    'unknown login status fails closed without rendering wire data',
+    () async {
+      final store = MemoryCredentialStore();
+      late String requestId;
+      late String expiresAt;
+      final api = FakeApi((request) async {
+        if (request.path == '/api/v1/auth/login-links') {
+          requestId =
+              (request.body! as Map<String, Object?>)['requestId']! as String;
+          expiresAt = DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 10))
+              .toIso8601String();
+          return jsonResponse(<String, Object?>{
+            'accepted': true,
+            'requestId': requestId,
+            'expiresAt': expiresAt,
+            'pollIntervalSeconds': 2,
+          });
+        }
+        return jsonResponse(<String, Object?>{
+          'requestId': requestId,
+          'applicationKind': 'admin',
+          'status': 'server_internal_detail',
+          'expiresAt': expiresAt,
+        });
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      await controller.startLoginLink('operator@example.test');
+
+      await expectLater(controller.pollLoginLink(), throwsFormatException);
+
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(controller.error, isNot(contains('server_internal_detail')));
+      expect(store.pending, isEmpty);
+    },
+  );
+
+  test('corrupted restored login challenge is purged before polling', () async {
+    final store = MemoryCredentialStore()
+      ..installationId = installationId
+      ..pending = <String, String>{
+        'requestId': 'not-a-uuid',
+        'pollToken': 'short',
+        'codeVerifier': 'short',
+        'state': 'short',
+        'expiresAt': DateTime.now()
+            .toUtc()
+            .add(const Duration(minutes: 10))
+            .toIso8601String(),
+        'pollIntervalSeconds': '60',
+      };
+    final controller = SessionController(
+      api: FakeApi((_) async => throw StateError('must not call API')),
+      credentialStore: store,
+    );
+
+    await controller.restore();
+
+    expect(controller.phase, SessionPhase.signedOut);
+    expect(controller.challenge, isNull);
+    expect(store.pending, isEmpty);
+  });
+
+  test(
+    'a second login request cannot replace a live credential tuple',
+    () async {
+      final store = MemoryCredentialStore();
+      final api = FakeApi((request) async {
+        final body = request.body! as Map<String, Object?>;
+        return jsonResponse(<String, Object?>{
+          'accepted': true,
+          'requestId': body['requestId'],
+          'expiresAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 10))
+              .toIso8601String(),
+          'pollIntervalSeconds': 2,
+        });
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      await controller.startLoginLink('operator@example.test');
+      final originalRequestId = controller.challenge!.requestId;
+
+      await expectLater(
+        controller.startLoginLink('other@example.test'),
+        throwsStateError,
+      );
+
+      expect(controller.challenge!.requestId, originalRequestId);
+      expect(api.requests, hasLength(1));
+    },
+  );
+
+  test(
+    'cancellation during exchange persistence cannot restore a session',
+    () async {
+      final store = MemoryCredentialStore()..installationId = installationId;
+      final barrier = Completer<void>();
+      final writeStarted = Completer<void>();
+      store.sessionWriteBarrier = barrier;
+      store.sessionWriteStarted = writeStarted;
+      late String requestId;
+      late String expiresAt;
+      final api = FakeApi((request) async {
+        if (request.path == '/api/v1/auth/login-links') {
+          requestId =
+              (request.body! as Map<String, Object?>)['requestId']! as String;
+          expiresAt = DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 10))
+              .toIso8601String();
+          return jsonResponse(<String, Object?>{
+            'accepted': true,
+            'requestId': requestId,
+            'expiresAt': expiresAt,
+            'pollIntervalSeconds': 2,
+          });
+        }
+        if (request.path.endsWith('/status')) {
+          return jsonResponse(<String, Object?>{
+            'requestId': requestId,
+            'applicationKind': 'admin',
+            'status': 'approved',
+            'expiresAt': expiresAt,
+          });
+        }
+        if (request.path.endsWith('/exchange')) {
+          return jsonResponse(rotatedSession());
+        }
+        if (request.path.endsWith('/cancel') ||
+            request.path == '/api/v1/auth/logout') {
+          return jsonResponse(<String, Object?>{});
+        }
+        throw StateError('unexpected ${request.path}');
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      await controller.startLoginLink('operator@example.test');
+
+      final poll = controller.pollLoginLink();
+      await writeStarted.future;
+      await controller.cancelLoginLink();
+      barrier.complete();
+
+      expect(await poll, isFalse);
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(controller.accessToken, isNull);
+      expect(store.session, isEmpty);
+      expect(store.pending, isEmpty);
+    },
+  );
+
+  test(
+    'cancellation during bootstrap purges and cannot reauthenticate',
+    () async {
+      final store = MemoryCredentialStore()..installationId = installationId;
+      final meStarted = Completer<void>();
+      final meResponse = Completer<ApiResponse>();
+      late String requestId;
+      late String expiresAt;
+      final api = FakeApi((request) async {
+        if (request.path == '/api/v1/auth/login-links') {
+          requestId =
+              (request.body! as Map<String, Object?>)['requestId']! as String;
+          expiresAt = DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 10))
+              .toIso8601String();
+          return jsonResponse(<String, Object?>{
+            'accepted': true,
+            'requestId': requestId,
+            'expiresAt': expiresAt,
+            'pollIntervalSeconds': 2,
+          });
+        }
+        if (request.path.endsWith('/status')) {
+          return jsonResponse(<String, Object?>{
+            'requestId': requestId,
+            'applicationKind': 'admin',
+            'status': 'approved',
+            'expiresAt': expiresAt,
+          });
+        }
+        if (request.path.endsWith('/exchange')) {
+          return jsonResponse(rotatedSession());
+        }
+        if (request.path == '/api/v1/me') {
+          if (!meStarted.isCompleted) meStarted.complete();
+          return meResponse.future;
+        }
+        if (request.path == '/api/v1/auth/logout') {
+          return jsonResponse(<String, Object?>{});
+        }
+        throw StateError('unexpected ${request.path}');
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      await controller.startLoginLink('operator@example.test');
+
+      final poll = controller.pollLoginLink();
+      await meStarted.future;
+      await controller.cancelLoginLink();
+      meResponse.complete(
+        jsonResponse(<String, Object?>{
+          'userId': storedSession()['userId'],
+          'platformRoles': <Object?>['platform_administrator'],
+        }),
+      );
+
+      expect(await poll, isFalse);
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(controller.accessToken, isNull);
+      expect(controller.authorization.isOperator, isFalse);
+      expect(store.session, isEmpty);
+      expect(store.pending, isEmpty);
+    },
+  );
+
+  test(
+    'bootstrap identity mismatch purges the restored operator session',
+    () async {
+      final store = MemoryCredentialStore()
+        ..installationId = installationId
+        ..session = storedSession();
+      final api = FakeApi(
+        (_) async => jsonResponse(<String, Object?>{
+          'userId': '55555555-5555-4555-8555-555555555555',
+          'platformRoles': <Object?>['platform_administrator'],
+        }),
+      );
+      final controller = SessionController(api: api, credentialStore: store);
+
+      await controller.restore();
+
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(controller.authorization.isOperator, isFalse);
+      expect(store.session, isEmpty);
     },
   );
 
