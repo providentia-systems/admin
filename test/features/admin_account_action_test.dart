@@ -1,10 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:providentia_admin/app/providentia_admin_app.dart';
+import 'package:providentia_admin/core/api/api_client.dart';
 import 'package:providentia_admin/core/auth/credential_store.dart';
 import 'package:providentia_admin/core/auth/session_controller.dart';
 import 'package:providentia_admin/features/auth/admin_account_action_controller.dart';
 import 'package:providentia_admin/features/auth/admin_account_action_page.dart';
 import 'package:providentia_admin/features/auth/admin_account_action_port.dart';
+import 'package:providentia_admin/features/auth/admin_approval_controller.dart';
+import 'package:providentia_admin/features/auth/admin_approval_port.dart';
 import 'package:providentia_admin/features/auth/login_page.dart';
 
 import '../support/admin_approval_fixture.dart';
@@ -53,31 +61,82 @@ final class _FailingAccountActionPort implements AdminAccountActionPort {
       throw StateError('transport detail');
 }
 
-final class _EmptyCredentialStore implements CredentialStore {
-  @override
-  Future<void> clearPendingLogin() async {}
+final class _DelayedResetAccountActionPort implements AdminAccountActionPort {
+  final Completer<void> resetGate = Completer<void>();
 
   @override
-  Future<void> clearSession() async {}
+  Future<void> completePasswordReset({
+    required String token,
+    required String password,
+  }) => resetGate.future;
 
   @override
-  Future<String?> readInstallationId() async => null;
+  Future<void> requestPasswordReset(String email) async {}
 
   @override
-  Future<Map<String, String>> readPendingLogin() async => <String, String>{};
+  Future<void> resendVerification(String email) async {}
 
   @override
-  Future<Map<String, String>> readSession() async => <String, String>{};
-
-  @override
-  Future<void> writeInstallationId(String value) async {}
-
-  @override
-  Future<void> writePendingLogin(Map<String, String> values) async {}
-
-  @override
-  Future<void> writeSession(Map<String, String> values) async {}
+  Future<void> verifyEmail(String token) async {}
 }
+
+final class _FakePasswordResetSessionBoundary
+    implements AdminPasswordResetSessionBoundary {
+  var calls = 0;
+
+  @override
+  Future<void> revokeAfterPasswordReset() async => calls += 1;
+}
+
+final class _EmptyCredentialStore implements CredentialStore {
+  String? installationId;
+  Map<String, String> session = <String, String>{};
+  Map<String, String> pending = <String, String>{};
+  var sessionClears = 0;
+  var pendingClears = 0;
+
+  @override
+  Future<void> clearPendingLogin() async {
+    pendingClears += 1;
+    pending.clear();
+  }
+
+  @override
+  Future<void> clearSession() async {
+    sessionClears += 1;
+    session.clear();
+  }
+
+  @override
+  Future<String?> readInstallationId() async => installationId;
+
+  @override
+  Future<Map<String, String>> readPendingLogin() async => Map.of(pending);
+
+  @override
+  Future<Map<String, String>> readSession() async => Map.of(session);
+
+  @override
+  Future<void> writeInstallationId(String value) async =>
+      installationId = value;
+
+  @override
+  Future<void> writePendingLogin(Map<String, String> values) async =>
+      pending = Map.of(values);
+
+  @override
+  Future<void> writeSession(Map<String, String> values) async =>
+      session = Map.of(values);
+}
+
+AdminAccountActionController _controller(
+  AdminAccountActionPort port, {
+  AdminPasswordResetSessionBoundary? passwordResetSessionBoundary,
+}) => AdminAccountActionController(
+  port,
+  passwordResetSessionBoundary:
+      passwordResetSessionBoundary ?? _FakePasswordResetSessionBoundary(),
+);
 
 Uri _accountLink(String action) => Uri.parse(
   'providentia-admin://login-link/admin#action=$action&token=$approvalToken',
@@ -112,7 +171,7 @@ void main() {
 
   test('verification is one-shot and clears the fragment credential', () async {
     final port = _FakeAccountActionPort();
-    final controller = AdminAccountActionController(port);
+    final controller = _controller(port);
 
     await controller.begin(_accountLink('verify-email'));
 
@@ -125,7 +184,7 @@ void main() {
     'recovery requests normalize email and remain enumeration-safe',
     () async {
       final port = _FakeAccountActionPort();
-      final controller = AdminAccountActionController(port);
+      final controller = _controller(port);
 
       await controller.requestPasswordReset(' OPERATOR@Example.Test ');
 
@@ -138,7 +197,11 @@ void main() {
     tester,
   ) async {
     final port = _FakeAccountActionPort();
-    final controller = AdminAccountActionController(port);
+    final resetBoundary = _FakePasswordResetSessionBoundary();
+    final controller = _controller(
+      port,
+      passwordResetSessionBoundary: resetBoundary,
+    );
     await controller.begin(_accountLink('password-reset'));
 
     await tester.pumpWidget(
@@ -158,16 +221,128 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(port.resets.single.$1, approvalToken);
+    expect(resetBoundary.calls, 1);
     expect(controller.phase, AdminAccountActionPhase.resetComplete);
     expect(controller.hasEphemeralCredential, isFalse);
   });
 
+  testWidgets(
+    'successful reset purges the live session and cannot reveal Admin shell',
+    (tester) async {
+      final store = _EmptyCredentialStore()
+        ..installationId = _installationId
+        ..session = _storedSession()
+        ..pending = <String, String>{'requestId': 'pending-secret'};
+      final sessionApi = FakeApi(
+        (_) async => jsonResponse(<String, Object?>{
+          'userId': _storedSession()['userId'],
+          'platformRoles': <Object?>['platform_administrator'],
+        }),
+      );
+      final session = SessionController(
+        api: sessionApi,
+        credentialStore: store,
+      );
+      await session.restore();
+      expect(session.phase, SessionPhase.authenticated);
+
+      final appApi = ApiClient(
+        baseUri: Uri.parse('https://api.example.test'),
+        httpClient: MockClient(
+          (_) async => http.Response(
+            '{}',
+            200,
+            headers: const <String, String>{'content-type': 'application/json'},
+          ),
+        ),
+        accessTokenProvider: () => session.accessToken,
+        ensureAccessToken: ({required force}) =>
+            session.ensureFreshAccessToken(force: force),
+        onAuthorizationLost: session.authorizationLost,
+      );
+      final accountActions = _controller(
+        _FakeAccountActionPort(),
+        passwordResetSessionBoundary: CallbackAdminPasswordResetSessionBoundary(
+          session.revokeAfterPasswordReset,
+        ),
+      );
+      final approval = AdminApprovalController(
+        HttpAdminLoginApprovalPort(appApi),
+      );
+      addTearDown(() {
+        approval.dispose();
+        accountActions.dispose();
+        appApi.close();
+      });
+      await accountActions.begin(_accountLink('password-reset'));
+      await tester.pumpWidget(
+        ProvidentiaAdminApp(
+          api: appApi,
+          approval: approval,
+          accountActions: accountActions,
+          session: session,
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const Key('admin-reset-password')),
+        'a-strong-admin-password',
+      );
+      await tester.enterText(
+        find.byKey(const Key('admin-reset-confirmation')),
+        'a-strong-admin-password',
+      );
+      await tester.tap(find.byKey(const Key('complete-admin-password-reset')));
+      await tester.pumpAndSettle();
+
+      expect(session.phase, SessionPhase.signedOut);
+      expect(session.accessToken, isNull);
+      expect(session.authorization.isOperator, isFalse);
+      expect(store.session, isEmpty);
+      expect(store.pending, isEmpty);
+      expect(store.sessionClears, 1);
+      expect(store.pendingClears, 1);
+
+      accountActions.dismiss();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Providentia administration'), findsNothing);
+      expect(
+        find.text('Sign in with an account that has a platform operator role.'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  test(
+    'dismissed reset still revokes a session after server success',
+    () async {
+      final port = _DelayedResetAccountActionPort();
+      final resetBoundary = _FakePasswordResetSessionBoundary();
+      final controller = _controller(
+        port,
+        passwordResetSessionBoundary: resetBoundary,
+      );
+      await controller.begin(_accountLink('password-reset'));
+
+      final resetting = controller.completePasswordReset(
+        'a-strong-admin-password',
+      );
+      await Future<void>.delayed(Duration.zero);
+      controller.dismiss();
+      port.resetGate.complete();
+      await resetting;
+
+      expect(resetBoundary.calls, 1);
+      expect(controller.phase, AdminAccountActionPhase.dismissed);
+      expect(controller.hasEphemeralCredential, isFalse);
+    },
+  );
+
   testWidgets('failed account-message request clears busy state safely', (
     tester,
   ) async {
-    final accountActions = AdminAccountActionController(
-      _FailingAccountActionPort(),
-    );
+    final accountActions = _controller(_FailingAccountActionPort());
     final session = SessionController(
       api: FakeApi((_) async => throw StateError('must not call API')),
       credentialStore: _EmptyCredentialStore(),
@@ -192,3 +367,19 @@ void main() {
     expect(button.onPressed, isNotNull);
   });
 }
+
+const String _installationId = '44444444-4444-4444-8444-444444444444';
+
+Map<String, String> _storedSession() => <String, String>{
+  'accessToken': 'access-token',
+  'refreshToken': 'refresh-token',
+  'sessionId': '0198f4e2-7abc-7def-8abc-0123456789ab',
+  'deviceId': '22222222-2222-4222-8222-222222222222',
+  'installationId': _installationId,
+  'userId': '0198f4e3-7abc-7def-8abc-0123456789ab',
+  'accessExpiresAt': '2026-09-01T00:00:00Z',
+  'refreshExpiresAt': '2026-10-01T00:00:00Z',
+  'idleExpiresAt': '2026-10-01T00:00:00Z',
+  'refreshIdleTtlSeconds': '2592000',
+  'transport': 'native',
+};

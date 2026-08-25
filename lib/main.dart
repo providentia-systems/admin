@@ -36,6 +36,9 @@ Future<void> main(List<String> arguments) async {
   final approval = AdminApprovalController(HttpAdminLoginApprovalPort(api));
   final accountActions = AdminAccountActionController(
     HttpAdminAccountActionPort(api),
+    passwordResetSessionBoundary: CallbackAdminPasswordResetSessionBoundary(
+      session.revokeAfterPasswordReset,
+    ),
   );
   final linkSource = LinuxApplicationLinkSource();
   await linkSource.start();

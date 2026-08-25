@@ -319,6 +319,17 @@ final class SessionController extends ChangeNotifier {
     unawaited(_clearStoredCredentialMaterial());
   }
 
+  /// Synchronously removes every privileged in-memory capability after a
+  /// successful password reset, then waits for both native keyring tuples to
+  /// be deleted before the account-action UI may report completion.
+  Future<void> revokeAfterPasswordReset() async {
+    _clearMemory('Password reset completed. Sign in again.');
+    notifyListeners();
+    if (!await _clearStoredCredentialMaterial()) {
+      throw StateError('Administrator credential cleanup did not complete.');
+    }
+  }
+
   Future<bool> ensureFreshAccessToken({bool force = false}) {
     final accessToken = _accessToken;
     final refreshToken = _refreshToken;
@@ -458,14 +469,23 @@ final class SessionController extends ChangeNotifier {
     _error = message;
   }
 
-  Future<void> _clearStoredCredentialMaterial() async {
+  Future<bool> _clearStoredCredentialMaterial() async {
+    var cleared = true;
     try {
       await _credentialStore.clearSession();
+    } on Object {
+      cleared = false;
+    }
+    try {
       await _credentialStore.clearPendingLogin();
     } on Object {
+      cleared = false;
+    }
+    if (!cleared) {
       _error = 'The system keyring could not clear stored credentials.';
       notifyListeners();
     }
+    return cleared;
   }
 
   Future<void> _restorePendingLogin() async {

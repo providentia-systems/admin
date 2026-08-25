@@ -10,6 +10,25 @@ abstract interface class AdminAccountActionPort {
   });
 }
 
+/// Revokes the local administrator session after the Backend has atomically
+/// completed a password reset and invalidated every server session.
+///
+/// Keeping this as a narrow port prevents the account-action controller from
+/// depending on the full session controller or privileged application shell.
+abstract interface class AdminPasswordResetSessionBoundary {
+  Future<void> revokeAfterPasswordReset();
+}
+
+final class CallbackAdminPasswordResetSessionBoundary
+    implements AdminPasswordResetSessionBoundary {
+  const CallbackAdminPasswordResetSessionBoundary(this._revoke);
+
+  final Future<void> Function() _revoke;
+
+  @override
+  Future<void> revokeAfterPasswordReset() => _revoke();
+}
+
 final class HttpAdminAccountActionPort implements AdminAccountActionPort {
   const HttpAdminAccountActionPort(this._api);
 
