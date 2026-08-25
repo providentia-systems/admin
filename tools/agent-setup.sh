@@ -72,11 +72,13 @@ export PUB_CACHE="${PROVIDENTIA_PUB_CACHE:-${TOOL_CACHE}/pub-cache}"
 export XDG_CONFIG_HOME="${PROVIDENTIA_XDG_CONFIG_HOME:-${TOOL_CACHE}/xdg/config}"
 export XDG_CACHE_HOME="${PROVIDENTIA_XDG_CACHE_HOME:-${TOOL_CACHE}/xdg/cache}"
 export XDG_DATA_HOME="${PROVIDENTIA_XDG_DATA_HOME:-${TOOL_CACHE}/xdg/data}"
+export ANALYZER_STATE_LOCATION_OVERRIDE="${PROVIDENTIA_ANALYZER_STATE_LOCATION:-${XDG_CACHE_HOME}/dart-analysis}"
 # Flutter otherwise probes the Azure instance metadata endpoint while trying
 # to infer whether it runs on a bot. Agent bootstrap is CI by definition, so
 # declare that explicitly and keep instance credentials outside its reach.
 export CI="${CI:-true}"
-mkdir -p "${PUB_CACHE}" "${XDG_CONFIG_HOME}" "${XDG_CACHE_HOME}" "${XDG_DATA_HOME}"
+mkdir -p "${PUB_CACHE}" "${XDG_CONFIG_HOME}" "${XDG_CACHE_HOME}" \
+  "${XDG_DATA_HOME}" "${ANALYZER_STATE_LOCATION_OVERRIDE}"
 
 cd "${PROJECT_ROOT}"
 bash tool/materialize_contract.sh
@@ -90,6 +92,7 @@ export PUB_CACHE="${PUB_CACHE}"
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME}"
 export XDG_DATA_HOME="${XDG_DATA_HOME}"
+export ANALYZER_STATE_LOCATION_OVERRIDE="${ANALYZER_STATE_LOCATION_OVERRIDE}"
 export CI="${CI}"
 export PROVIDENTIA_API_BASE_URL="${PROVIDENTIA_API_BASE_URL:-http://localhost:8080}"
 EOF

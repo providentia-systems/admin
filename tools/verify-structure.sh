@@ -4,7 +4,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
+for command in bash cut find grep gzip node sha256sum; do
+  command -v "${command}" >/dev/null || {
+    echo "Missing structural-gate prerequisite: ${command}" >&2
+    exit 1
+  }
+done
+
 test -f pubspec.yaml
+test -f pubspec.lock
 test -f contracts/source/providentia-v1.json.gz
 test -f contracts/contract.lock.json
 test -f contracts/generated/providentia_api_client/lib/providentia_api_client.dart
@@ -23,25 +31,26 @@ for forbidden in android ios macos web windows; do
   fi
 done
 
-if rg -n '/api/v1/homes' lib; then
+if grep -RIn --include='*.dart' '/api/v1/homes' lib; then
   echo "Admin must not call any household endpoint." >&2
   exit 1
 fi
 
-if rg -n "providentia\.(?!admin\.)" lib --pcre2; then
+if grep -RIn --include='*.dart' 'providentia\.' lib \
+  | grep -v 'providentia\.admin\.'; then
   echo "Admin must use an isolated credential namespace." >&2
   exit 1
 fi
 
 for forbidden in ai_integration catalog_sharing data_governance homes inventory \
   purchasing reporting shopping sync_conflicts; do
-  if find lib -type d -name "${forbidden}" -print -quit | grep -q .; then
+  if [ -n "$(find lib -type d -name "${forbidden}" -print -quit)" ]; then
     echo "Admin contains forbidden homeowner feature directory: ${forbidden}" >&2
     exit 1
   fi
 done
 
-if rg -n '^\s+(camera|drift|drift_flutter|file_picker|image_picker|sqlite3):' pubspec.yaml; then
+if grep -En '^[[:space:]]+(camera|drift|drift_flutter|file_picker|image_picker|sqlite3):' pubspec.yaml; then
   echo "Admin contains a forbidden homeowner/media persistence dependency." >&2
   exit 1
 fi
