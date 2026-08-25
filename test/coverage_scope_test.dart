@@ -4,6 +4,7 @@ import 'package:providentia_admin/app/admin_shell.dart';
 import 'package:providentia_admin/app/providentia_admin_app.dart';
 import 'package:providentia_admin/app/theme.dart';
 import 'package:providentia_admin/core/api/api_client.dart';
+import 'package:providentia_admin/core/auth/admin_account_link.dart';
 import 'package:providentia_admin/core/auth/admin_approval_link.dart';
 import 'package:providentia_admin/core/auth/credential_store.dart';
 import 'package:providentia_admin/core/auth/operator_authorization.dart';
@@ -15,6 +16,9 @@ import 'package:providentia_admin/features/administrators/platform_administratio
 import 'package:providentia_admin/features/administrators/platform_administrator_models.dart';
 import 'package:providentia_admin/features/administrators/platform_administrator_repository.dart';
 import 'package:providentia_admin/features/administrators/platform_administrators_page.dart';
+import 'package:providentia_admin/features/auth/admin_account_action_controller.dart';
+import 'package:providentia_admin/features/auth/admin_account_action_page.dart';
+import 'package:providentia_admin/features/auth/admin_account_action_port.dart';
 import 'package:providentia_admin/features/auth/admin_approval_controller.dart';
 import 'package:providentia_admin/features/auth/admin_approval_page.dart';
 import 'package:providentia_admin/features/auth/admin_approval_port.dart';
@@ -22,8 +26,12 @@ import 'package:providentia_admin/features/auth/login_page.dart';
 import 'package:providentia_admin/features/billing/billing_page.dart';
 import 'package:providentia_admin/features/billing/billing_repository.dart';
 import 'package:providentia_admin/features/catalog/catalog_models.dart';
+import 'package:providentia_admin/features/catalog/catalog_operations_models.dart';
+import 'package:providentia_admin/features/catalog/catalog_operations_page.dart';
+import 'package:providentia_admin/features/catalog/catalog_operations_repository.dart';
 import 'package:providentia_admin/features/catalog/catalog_page.dart';
 import 'package:providentia_admin/features/catalog/catalog_repository.dart';
+import 'package:providentia_admin/features/catalog/published_product_picker.dart';
 import 'package:providentia_admin/main.dart' as admin_main;
 
 void main() {
@@ -34,6 +42,8 @@ void main() {
       ApiClient,
       ApiException,
       ApiResponse,
+      AdminAccountLink,
+      AdminAccountLinkAction,
       SecureCredentialStore,
       AdminApprovalLink,
       PlatformRole,
@@ -59,6 +69,10 @@ void main() {
       AdminApprovalProof,
       AdminApprovalReview,
       HttpAdminLoginApprovalPort,
+      AdminAccountActionController,
+      AdminAccountActionPhase,
+      AdminAccountActionPage,
+      HttpAdminAccountActionPort,
       BillingPage,
       BillingPlan,
       BillingRepository,
@@ -67,9 +81,23 @@ void main() {
       ModerationPreview,
       CatalogPage,
       CatalogRepository,
+      PublishedProduct,
+      PublishedProductPage,
+      CatalogIconSummary,
+      CatalogProductDetail,
+      CatalogConflict,
+      CatalogIconCommand,
+      CatalogRevisionResult,
+      CatalogMergeProduct,
+      CatalogMergePreview,
+      CatalogMergeResult,
+      CatalogMergeEvent,
+      CatalogOperationsRepository,
+      CatalogOperationsPage,
+      PublishedProductPickerDialog,
     ];
 
-    expect(productionTypes, hasLength(38));
+    expect(productionTypes, hasLength(58));
     expect(buildAdminTheme(), isA<ThemeData>());
     expect(admin_main.main, isA<Future<void> Function(List<String>)>());
   });

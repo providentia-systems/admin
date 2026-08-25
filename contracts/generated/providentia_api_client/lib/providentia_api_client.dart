@@ -1,6 +1,6 @@
 // GENERATED FILE - DO NOT EDIT.
 // Source: contracts/providentia-v1.json
-// Contract SHA-256: f01c320e1900f523661bbba24225583f1d61bc00f3949cb0e7b5b2f6fd5a524e
+// Contract SHA-256: aa207f0d9adbf2df36e1fd9c420d340da2bb2948a638c95f0610d40c1a0124fc
 // This facade deliberately excludes every household endpoint.
 
 library;
@@ -27,6 +27,11 @@ const adminApiOperations = <String, AdminApiOperation>{
     operationId: 'cancelLoginLink',
     method: 'POST',
     pathTemplate: '/api/v1/auth/login-links/{requestId}/cancel',
+  ),
+  'completePasswordReset': AdminApiOperation(
+    operationId: 'completePasswordReset',
+    method: 'POST',
+    pathTemplate: '/api/v1/auth/password-reset/complete',
   ),
   'createBillingPlan': AdminApiOperation(
     operationId: 'createBillingPlan',
@@ -183,6 +188,16 @@ const adminApiOperations = <String, AdminApiOperation>{
     method: 'POST',
     pathTemplate: '/api/v1/auth/refresh',
   ),
+  'requestPasswordReset': AdminApiOperation(
+    operationId: 'requestPasswordReset',
+    method: 'POST',
+    pathTemplate: '/api/v1/auth/password-reset/request',
+  ),
+  'resendEmailVerification': AdminApiOperation(
+    operationId: 'resendEmailVerification',
+    method: 'POST',
+    pathTemplate: '/api/v1/auth/verify-email/resend',
+  ),
   'reverseCatalogMerge': AdminApiOperation(
     operationId: 'reverseCatalogMerge',
     method: 'POST',
@@ -232,6 +247,11 @@ const adminApiOperations = <String, AdminApiOperation>{
     operationId: 'updateOperatorAccountStatus',
     method: 'PATCH',
     pathTemplate: '/api/v1/admin/accounts/{userId}/status',
+  ),
+  'verifyEmail': AdminApiOperation(
+    operationId: 'verifyEmail',
+    method: 'POST',
+    pathTemplate: '/api/v1/auth/verify-email',
   ),
 };
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "scope": "all handwritten Dart production libraries under lib/",
-  "minimumLineCoveragePercent": 44,
+  "minimumLineCoveragePercent": 46,
   "targetLineCoveragePercent": 80,
   "ratchet": "The minimum may only increase as executable widget and control-plane tests land."
 }

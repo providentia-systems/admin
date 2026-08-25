@@ -3,11 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/session_controller.dart';
+import 'admin_account_action_controller.dart';
 
 final class LoginPage extends StatefulWidget {
-  const LoginPage({required this.session, super.key});
+  const LoginPage({
+    required this.session,
+    required this.accountActions,
+    super.key,
+  });
 
   final SessionController session;
+  final AdminAccountActionController accountActions;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -95,6 +101,27 @@ class _LoginPageState extends State<LoginPage> {
                           : const Icon(Icons.login),
                       label: const Text('Send secure sign-in link'),
                     ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      children: <Widget>[
+                        TextButton(
+                          key: const Key('request-admin-password-reset'),
+                          onPressed: _busy
+                              ? null
+                              : () => _requestAccountMessage(reset: true),
+                          child: const Text('Reset password'),
+                        ),
+                        TextButton(
+                          key: const Key('resend-admin-verification'),
+                          onPressed: _busy
+                              ? null
+                              : () => _requestAccountMessage(reset: false),
+                          child: const Text('Resend verification'),
+                        ),
+                      ],
+                    ),
                   ] else ...<Widget>[
                     const LinearProgressIndicator(),
                     const SizedBox(height: 16),
@@ -174,5 +201,22 @@ class _LoginPageState extends State<LoginPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Sign-in could not be completed safely.')),
     );
+  }
+
+  Future<void> _requestAccountMessage({required bool reset}) async {
+    final email = _email.text.trim();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid operator email address.')),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    if (reset) {
+      await widget.accountActions.requestPasswordReset(email);
+    } else {
+      await widget.accountActions.resendVerification(email);
+    }
+    if (mounted) setState(() => _busy = false);
   }
 }

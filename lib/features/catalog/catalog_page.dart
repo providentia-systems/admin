@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/session_controller.dart';
 import 'catalog_models.dart';
+import 'catalog_operations_page.dart';
+import 'catalog_operations_repository.dart';
 import 'catalog_repository.dart';
+import 'published_product_picker.dart';
 
-enum _CatalogLane { proposals, contributions }
+enum _CatalogLane { proposals, contributions, operations }
 
 final class CatalogPage extends StatefulWidget {
   const CatalogPage({
@@ -83,6 +86,11 @@ class _CatalogPageState extends State<CatalogPage> {
                   label: Text('Contributions'),
                   icon: Icon(Icons.volunteer_activism_outlined),
                 ),
+                const ButtonSegment(
+                  value: _CatalogLane.operations,
+                  label: Text('Catalog operations'),
+                  icon: Icon(Icons.account_tree_outlined),
+                ),
               ],
               selected: <_CatalogLane>{_lane},
               onSelectionChanged: (selection) {
@@ -122,82 +130,102 @@ class _CatalogPageState extends State<CatalogPage> {
                 },
               ),
             const Spacer(),
-            IconButton.filledTonal(
-              tooltip: 'Refresh moderation queue',
-              onPressed: _loading ? null : _load,
-              icon: const Icon(Icons.refresh),
-            ),
+            if (_lane != _CatalogLane.operations)
+              IconButton.filledTonal(
+                tooltip: 'Refresh moderation queue',
+                onPressed: _loading ? null : _load,
+                icon: const Icon(Icons.refresh),
+              ),
           ],
         ),
         const SizedBox(height: 12),
-        if (_hasError)
+        if (_lane != _CatalogLane.operations && _hasError)
           MaterialBanner(
             content: const Text('The moderation queue could not be loaded.'),
             actions: <Widget>[
               TextButton(onPressed: _load, child: const Text('Retry')),
             ],
           ),
-        if (_loading) const LinearProgressIndicator(),
+        if (_lane != _CatalogLane.operations && _loading)
+          const LinearProgressIndicator(),
         const SizedBox(height: 8),
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Expanded(
-                flex: 2,
-                child: Card(
-                  child: _items.isEmpty
-                      ? const Center(child: Text('This queue is empty.'))
-                      : ListView.separated(
-                          itemCount: _items.length,
-                          separatorBuilder: (_, _) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final item = _items[index];
-                            return ListTile(
-                              selected: item.id == _selected?.id,
-                              title: Text(item.title),
-                              subtitle: Text(
-                                '${item.kind} • revision ${item.revision}',
+          child: _lane == _CatalogLane.operations
+              ? CatalogOperationsPage(
+                  api: widget.api,
+                  session: widget.session,
+                  canReview: widget.canReview,
+                  canCurate: widget.canCurate,
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Expanded(
+                      flex: 2,
+                      child: Card(
+                        child: _items.isEmpty
+                            ? const Center(child: Text('This queue is empty.'))
+                            : ListView.separated(
+                                itemCount: _items.length,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final item = _items[index];
+                                  return ListTile(
+                                    selected: item.id == _selected?.id,
+                                    title: Text(item.title),
+                                    subtitle: Text(
+                                      '${item.kind} • revision ${item.revision}',
+                                    ),
+                                    trailing: Chip(label: Text(item.status)),
+                                    onTap: () {
+                                      _clearPreview();
+                                      setState(() => _selected = item);
+                                    },
+                                  );
+                                },
                               ),
-                              trailing: Chip(label: Text(item.status)),
-                              onTap: () {
-                                _clearPreview();
-                                setState(() => _selected = item);
-                              },
-                            );
-                          },
-                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 3,
+                      child: Card(
+                        child: _selected == null
+                            ? const Center(
+                                child: Text(
+                                  'Select a moderation item to review it.',
+                                ),
+                              )
+                            : _ModerationDetail(
+                                item: _selected!,
+                                isContribution:
+                                    _lane == _CatalogLane.contributions,
+                                canReview: widget.canReview,
+                                canCurate: widget.canCurate,
+                                preview: _preview,
+                                onDecision: _decide,
+                                onPreview: _loadPreview,
+                                onLinkProposal: _linkProposal,
+                                onPublishImage: _publishImage,
+                              ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 3,
-                child: Card(
-                  child: _selected == null
-                      ? const Center(
-                          child: Text('Select a moderation item to review it.'),
-                        )
-                      : _ModerationDetail(
-                          item: _selected!,
-                          isContribution: _lane == _CatalogLane.contributions,
-                          canReview: widget.canReview,
-                          canCurate: widget.canCurate,
-                          preview: _preview,
-                          onDecision: _decide,
-                          onPreview: _loadPreview,
-                          onLinkProposal: _linkProposal,
-                          onPublishImage: _publishImage,
-                        ),
-                ),
-              ),
-            ],
-          ),
         ),
       ],
     ),
   );
 
   Future<void> _load() async {
+    if (_lane == _CatalogLane.operations) {
+      setState(() {
+        _loading = false;
+        _hasError = false;
+      });
+      return;
+    }
     final epoch = widget.session.authorizationEpoch;
     setState(() {
       _loading = true;
@@ -310,18 +338,41 @@ class _CatalogPageState extends State<CatalogPage> {
   Future<void> _publishImage() async {
     final item = _selected;
     if (item == null) return;
-    final productId = await _textDialog(
-      title: 'Publish sanitized image',
-      label: 'Canonical product UUID',
+    final product = await showPublishedProductPicker(
+      context: context,
+      operations: CatalogOperationsRepository(widget.api),
+      title: 'Choose the product for this verified image',
     );
-    if (productId == null || productId.isEmpty) return;
-    final iconRevision = item.raw['expectedIconRevision'] as int? ?? 0;
+    if (product == null || !mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Publish verified image?'),
+        content: Text(
+          'Publish the sanitized image to ${product.canonicalName} '
+          'using contribution revision ${item.revision} and current icon '
+          'revision ${product.currentIconRevision}?',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm-image-publication'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Publish image'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     try {
       await _repository.publishImage(
         contributionId: item.id,
-        productId: productId,
+        productId: product.id,
         expectedContributionRevision: item.revision,
-        expectedIconRevision: iconRevision,
+        expectedIconRevision: product.currentIconRevision,
       );
       _clearPreview();
       await _load();
@@ -409,6 +460,7 @@ final class _ModerationDetail extends StatelessWidget {
   Widget build(BuildContext context) {
     final imageContribution =
         isContribution && item.kind.toLowerCase().contains('image');
+    final approvedContribution = isContribution && item.status == 'approved';
     return ListView(
       padding: const EdgeInsets.all(20),
       children: <Widget>[
@@ -469,7 +521,13 @@ final class _ModerationDetail extends StatelessWidget {
               ),
             ],
           ),
-        if (isContribution && canCurate) ...<Widget>[
+        if (isContribution && canCurate && !approvedContribution) ...<Widget>[
+          const SizedBox(height: 12),
+          const Text(
+            'Curator publication actions become available only after the current contribution revision is approved.',
+          ),
+        ],
+        if (isContribution && canCurate && approvedContribution) ...<Widget>[
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
