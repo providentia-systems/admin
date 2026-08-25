@@ -72,6 +72,11 @@ set_target_properties(${BINARY_NAME}
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# flutter_secure_storage carries a cross-platform JNI helper transitively. A
+# hosted Linux runner may expose a JDK while an ordinary desktop does not; do
+# not let that host accident add Android/JVM native code to the Admin bundle.
+set(CMAKE_DISABLE_FIND_PACKAGE_JNI TRUE CACHE BOOL
+  "Providentia Admin is Linux-only and must not bundle JNI" FORCE)
 include(flutter/generated_plugins.cmake)
 
 

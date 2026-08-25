@@ -43,6 +43,17 @@ grep -Fqx 'Exec=providentia_admin %u' \
   packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
 grep -Fqx 'MimeType=x-scheme-handler/providentia-admin;' \
   packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
+grep -Fq 'set(CMAKE_DISABLE_FIND_PACKAGE_JNI TRUE CACHE BOOL' \
+  linux/CMakeLists.txt
+grep -Fq 'path_provider_android: 2.2.23' pubspec.yaml
+if grep -Eq '^  (jni|jni_flutter|jni_util):' pubspec.lock; then
+  echo 'Linux-only Admin dependency lock must not contain JNI packages.' >&2
+  exit 1
+fi
+if grep -Fq 'jni' linux/flutter/generated_plugins.cmake; then
+  echo 'Linux-only Admin generated plugins must not contain JNI.' >&2
+  exit 1
+fi
 grep -Fq "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093" \
   .github/workflows/quality.yml .github/workflows/release-linux.yml
 grep -Fq 'environment: production-release' .github/workflows/release-linux.yml
