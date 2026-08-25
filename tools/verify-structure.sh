@@ -43,6 +43,11 @@ grep -Fqx 'Exec=providentia_admin %u' \
   packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
 grep -Fqx 'MimeType=x-scheme-handler/providentia-admin;' \
   packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
+grep -Fq 'G_APPLICATION_HANDLES_OPEN' linux/runner/my_application.cc
+grep -Fq 'providentia-admin://login-link/admin#' \
+  linux/runner/my_application.cc
+test "$(grep -Fc 'dispatch_pending_link(self);' linux/runner/my_application.cc)" = 2
+grep -Fq 'clear_pending_link(self);' linux/runner/my_application.cc
 grep -Fq 'set(CMAKE_DISABLE_FIND_PACKAGE_JNI TRUE CACHE BOOL' \
   linux/CMakeLists.txt
 grep -Fq 'path_provider_android: 2.2.23' pubspec.yaml

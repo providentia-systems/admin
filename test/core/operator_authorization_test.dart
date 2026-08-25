@@ -34,9 +34,9 @@ void main() {
         'catalog_reviewer',
       ]);
 
-      expect(authorization.allows(OperatorCapability.reviewCatalog), isTrue);
-      expect(authorization.allows(OperatorCapability.curateCatalog), isFalse);
-      expect(authorization.allows(OperatorCapability.manageAccounts), isFalse);
+      expect(authorization.capabilities, <OperatorCapability>{
+        OperatorCapability.reviewCatalog,
+      });
     });
 
     test('administrator mirrors backend super-operator capabilities', () {
@@ -55,9 +55,21 @@ void main() {
         'catalog_curator',
       ]);
 
-      expect(authorization.allows(OperatorCapability.reviewCatalog), isTrue);
-      expect(authorization.allows(OperatorCapability.curateCatalog), isTrue);
-      expect(authorization.allows(OperatorCapability.manageAccounts), isFalse);
+      expect(authorization.capabilities, <OperatorCapability>{
+        OperatorCapability.reviewCatalog,
+        OperatorCapability.curateCatalog,
+      });
+    });
+
+    test('billing operator is isolated from accounts and catalog routes', () {
+      final authorization = OperatorAuthorization.fromWire(const <Object?>[
+        'billing_operator',
+      ]);
+
+      expect(authorization.capabilities, <OperatorCapability>{
+        OperatorCapability.viewBilling,
+        OperatorCapability.manageBilling,
+      });
     });
   });
 }
