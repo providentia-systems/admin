@@ -4,11 +4,92 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:providentia_admin/core/api/api_client.dart';
+import 'package:providentia_admin/features/catalog/catalog_models.dart';
 import 'package:providentia_admin/features/catalog/catalog_repository.dart';
 
 import '../support/fake_api.dart';
 
 void main() {
+  const storePricePayload = <String, Object?>{
+    'productId': '0198f4e1-7abc-7def-8abc-0123456789ab',
+    'packId': '0198f4e2-7abc-7def-8abc-0123456789ab',
+    'storeName': 'Central Market',
+    'storeLocation': 'Windhoek',
+    'price': '12.50',
+    'currency': 'NAD',
+    'observedOn': '2026-08-24',
+  };
+
+  test('reads a strict typed store-price moderation projection', () async {
+    final api = FakeApi(
+      (_) async => jsonResponse(<String, Object?>{
+        'data': <Object?>[
+          <String, Object?>{
+            'id': '0198f4e3-7abc-7def-8abc-0123456789ab',
+            'type': 'store_price',
+            'status': 'pending',
+            'revision': 3,
+            'payload': storePricePayload,
+          },
+        ],
+      }),
+    );
+
+    final item = (await CatalogRepository(api).contributionReview()).single;
+
+    expect(item.title, 'Central Market · NAD 12.50');
+    expect(item.storePrice?.storeLocation, 'Windhoek');
+    expect(item.storePrice?.productId, storePricePayload['productId']);
+    expect(item.storePrice?.packId, storePricePayload['packId']);
+    expect(api.requests.single.path, '/api/v1/catalog-contributions/review');
+    expect(api.requests.single.query, <String, String>{
+      'limit': '50',
+      'offset': '0',
+    });
+  });
+
+  test('store-price projection fails closed on household metadata', () async {
+    final api = FakeApi(
+      (_) async => jsonResponse(<String, Object?>{
+        'data': <Object?>[
+          <String, Object?>{
+            'id': '0198f4e3-7abc-7def-8abc-0123456789ab',
+            'type': 'store_price',
+            'status': 'pending',
+            'revision': 3,
+            'payload': <String, Object?>{
+              ...storePricePayload,
+              'homeId': '0198f4e4-7abc-7def-8abc-0123456789ab',
+            },
+          },
+        ],
+      }),
+    );
+
+    await expectLater(
+      CatalogRepository(api).contributionReview(),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('store-price DTO rejects malformed values and revisions', () {
+    expect(
+      () => StorePriceModeration.fromJson(<String, Object?>{
+        ...storePricePayload,
+        'currency': 'nad',
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => CatalogQueueItem.fromJson(<String, Object?>{
+        'type': 'store_price',
+        'revision': 0,
+        'payload': storePricePayload,
+      }),
+      throwsFormatException,
+    );
+  });
+
   test(
     'proposal decision uses backend decision vocabulary and revision',
     () async {

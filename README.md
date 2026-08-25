@@ -24,15 +24,18 @@ Backend platform roles select the available workspaces:
   summaries, activate or suspend accounts, close accounts permanently, and
   grant or revoke platform roles;
 - catalog reviewers approve or reject sanitized, consent-bound proposals and
-  contributions;
+  contributions, including typed store-price facts with no contributor or home
+  attribution;
 - catalog curators link approved facts to the ordinary proposal pipeline and
   publish only server-sanitized, digest-verified product images;
 - billing operators can inspect the billing control plane. Enforcement remains
   disabled during the free stabilization phase (`BILLING_ENABLED=0`).
 
-Admin never exposes household stock, counts, receipts, purchases, locations,
-prices, notes, reports, private AI media, provider credentials or full backend
-access. Owner-only bootstrap/recovery stays in the backend CLI.
+Admin never exposes household stock, counts, receipts, purchases, household
+locations, private prices, notes, reports, contributor identity, private AI
+media, provider credentials or full backend access. Reviewers may see only the
+Backend's sanitized, attribution-free store-price projection when sharing
+consent is active. Owner-only bootstrap/recovery stays in the backend CLI.
 
 ## Start development
 

@@ -9,9 +9,11 @@ OpenAPI lock before changing runtime behavior.
   depth; every privileged request must remain backend-authorized.
 - A 401 or 403 from a privileged request must synchronously purge navigation,
   cached privileged state and capabilities before asynchronous cleanup.
-- Admin may display only privacy-safe account metadata and subscription summary.
-  Never add household stock, prices, receipts, purchases, locations, notes,
-  reports, private AI media, credentials, or provider references.
+- Admin may display only privacy-safe account metadata, subscription summaries,
+  and the Backend's attribution-free projection of consent-bound global catalog
+  contributions. Never add household stock, private prices, receipts, purchases,
+  household locations, notes, reports, private AI media, credentials, contributor
+  identity, or provider references.
 - Preserve revision-bound mutations and reload after conflicts. Do not invent a
   second catalog publication or role store.
 - Update backend runtime and contract first, then copy the exact contract and
