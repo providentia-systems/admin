@@ -4,18 +4,27 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUNDLE="${1:-${ROOT}/build/linux/x64/release/bundle}"
 OUTPUT="${ROOT}/build/packages"
-VERSION="0.1.0"
+VERSION="${PROVIDENTIA_RELEASE_VERSION:-0.1.0}"
 APP_ID="com.vastdevelopmentmethod.providentia.admin"
 APPIMAGE_TOOL_SHA256="b90f4a8b18967545fda78a445b27680a1642f1ef9488ced28b65398f2be7add2"
 APPIMAGE_TOOL_URL="https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
 
+if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+  echo "PROVIDENTIA_RELEASE_VERSION must be a semantic version without a v prefix." >&2
+  exit 64
+fi
+
 test -x "${BUNDLE}/providentia_admin"
 mkdir -p "${OUTPUT}"
+find "${OUTPUT}" -mindepth 1 -maxdepth 1 -type f -delete
+
+WORK_ROOT="$(mktemp -d)"
+trap 'rm -rf -- "${WORK_ROOT}"' EXIT
 
 tar --create --gzip --file "${OUTPUT}/providentia-admin-${VERSION}-linux-x86_64.tar.gz" \
   --directory "${BUNDLE}" .
 
-DEB_ROOT="$(mktemp -d)"
+DEB_ROOT="${WORK_ROOT}/deb"
 install -d "${DEB_ROOT}/DEBIAN" "${DEB_ROOT}/opt/providentia-admin" \
   "${DEB_ROOT}/usr/bin" "${DEB_ROOT}/usr/share/applications" \
   "${DEB_ROOT}/usr/share/icons/hicolor/scalable/apps" \
@@ -23,7 +32,9 @@ install -d "${DEB_ROOT}/DEBIAN" "${DEB_ROOT}/opt/providentia-admin" \
 cp -a "${BUNDLE}/." "${DEB_ROOT}/opt/providentia-admin/"
 install -m 0755 "${ROOT}/packaging/linux/providentia_admin" \
   "${DEB_ROOT}/usr/bin/providentia_admin"
-install -m 0644 "${ROOT}/packaging/linux/debian-control" "${DEB_ROOT}/DEBIAN/control"
+sed "s/^Version: .*/Version: ${VERSION}/" \
+  "${ROOT}/packaging/linux/debian-control" > "${DEB_ROOT}/DEBIAN/control"
+chmod 0644 "${DEB_ROOT}/DEBIAN/control"
 install -m 0755 "${ROOT}/packaging/linux/debian-postinst" \
   "${DEB_ROOT}/DEBIAN/postinst"
 install -m 0755 "${ROOT}/packaging/linux/debian-postrm" \
@@ -37,7 +48,7 @@ install -m 0644 "${ROOT}/packaging/linux/${APP_ID}.metainfo.xml" \
 dpkg-deb --root-owner-group --build "${DEB_ROOT}" \
   "${OUTPUT}/providentia-admin_${VERSION}_amd64.deb"
 
-APPDIR="$(mktemp -d)/Providentia_Admin.AppDir"
+APPDIR="${WORK_ROOT}/Providentia_Admin.AppDir"
 install -d "${APPDIR}/usr/lib/providentia-admin" "${APPDIR}/usr/share/applications" \
   "${APPDIR}/usr/share/icons/hicolor/scalable/apps"
 cp -a "${BUNDLE}/." "${APPDIR}/usr/lib/providentia-admin/"
@@ -59,5 +70,5 @@ fi
 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "${TOOL}" "${APPDIR}" \
   "${OUTPUT}/Providentia_Admin-${VERSION}-x86_64.AppImage"
 
-sha256sum "${OUTPUT}"/* > "${OUTPUT}/SHA256SUMS"
+(cd "${OUTPUT}" && sha256sum -- * > SHA256SUMS)
 echo "Linux packages written to ${OUTPUT}."

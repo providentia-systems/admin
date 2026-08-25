@@ -22,7 +22,13 @@ dart format --output=none --set-exit-if-changed lib test
 flutter analyze --fatal-infos --fatal-warnings
 flutter test --coverage
 node tool/check_coverage.mjs
+bash tool/test_linux_release_scripts.sh
 flutter build linux --release \
   --dart-define=PROVIDENTIA_API_BASE_URL=https://api.example.invalid
+PROVIDENTIA_RELEASE_VERSION=0.1.0-dev \
+  bash packaging/linux/build-packages.sh
+PROVIDENTIA_LINUX_LAUNCH_SMOKE=true \
+  bash tool/verify_linux_deb.sh \
+    build/packages/providentia-admin_0.1.0-dev_amd64.deb
 
-echo "Admin format, contract, analysis, tests, coverage and Linux release are green."
+echo "Admin format, contract, analysis, tests, coverage, Linux packages and launch are green."

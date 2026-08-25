@@ -1,0 +1,220 @@
+name: Release Linux
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic release version without a v prefix
+        required: true
+        type: string
+      publish:
+        description: Sign and publish an existing matching tag
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-release-linux-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Validate protected release configuration
+    runs-on: ubuntu-24.04
+    environment: production-release
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+      version: ${{ steps.gate.outputs.version }}
+    env:
+      API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+      SIGNING_KEY: ${{ secrets.LINUX_SIGNING_KEY_BASE64 }}
+      SIGNING_KEY_ID: ${{ secrets.LINUX_SIGNING_KEY_ID }}
+      SIGNING_PASSPHRASE: ${{ secrets.LINUX_SIGNING_PASSPHRASE }}
+    steps:
+      - id: gate
+        name: Fail closed on invalid release inputs
+        env:
+          REQUESTED_PUBLISH: ${{ inputs.publish }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            version="$REQUESTED_VERSION"
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]] || exit 64
+          [[ "$API_BASE_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$ ]] || {
+            echo 'PRODUCTION_API_BASE_URL must be an HTTPS origin without credentials, path, query or fragment.' >&2
+            exit 78
+          }
+
+          publish=false
+          if [[ "$GITHUB_EVENT_NAME" == push || "$REQUESTED_PUBLISH" == true ]]; then
+            publish=true
+          fi
+          if [[ "$publish" == true ]]; then
+            [[ "$GITHUB_REF" == "refs/tags/v${version}" ]] || {
+              echo 'Publishing requires dispatching the exact existing vVERSION tag.' >&2
+              exit 78
+            }
+            missing=''
+            for name in SIGNING_KEY SIGNING_KEY_ID SIGNING_PASSPHRASE; do
+              [[ -n "${!name}" ]] || missing="${missing} ${name}"
+            done
+            [[ -z "$missing" ]] || {
+              echo "Signed Linux publication is unavailable; missing protected configuration:${missing}" >&2
+              exit 78
+            }
+          fi
+
+          echo "publish=${publish}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build Linux release candidate
+    needs: preflight
+    runs-on: ubuntu-24.04
+    environment: production-release
+    timeout-minutes: 60
+    env:
+      PROVIDENTIA_RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+      PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+    steps:
+      - name: Check out exact release ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Install pinned Node runtime
+        run: |
+          bash tool/install_node_linux.sh "$RUNNER_TEMP/providentia-node"
+          echo "$RUNNER_TEMP/providentia-node/node/bin" >> "$GITHUB_PATH"
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake curl dpkg-dev libegl1 libgles2 libgtk-3-dev \
+            liblzma-dev libsecret-1-dev ninja-build pkg-config
+
+      - name: Test Linux release gates
+        run: bash tool/test_linux_release_scripts.sh
+
+      - name: Verify source and install pinned Flutter SDK
+        run: |
+          bash tools/verify-structure.sh
+          bash tool/install_flutter_linux.sh "$RUNNER_TEMP/providentia-sdk"
+          echo "$RUNNER_TEMP/providentia-sdk/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Validate and build production release
+        run: |
+          flutter pub get --enforce-lockfile
+          dart format --output=none --set-exit-if-changed lib test
+          flutter analyze --fatal-infos --fatal-warnings
+          flutter test --coverage
+          node tool/check_coverage.mjs
+          flutter build linux --release \
+            --build-name "$PROVIDENTIA_RELEASE_VERSION" \
+            --build-number "$GITHUB_RUN_NUMBER" \
+            --dart-define=PROVIDENTIA_API_BASE_URL="$PRODUCTION_API_BASE_URL"
+
+      - name: Package release and produce evidence
+        run: |
+          bash packaging/linux/build-packages.sh
+          dart pub deps --json > build/packages/dart-dependencies.json
+          jq --null-input \
+            --arg commit "$GITHUB_SHA" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg version "$PROVIDENTIA_RELEASE_VERSION" \
+            '{commit: $commit, runId: $runId, version: $version, platform: "linux-x64"}' \
+            > build/packages/release-provenance.json
+          (
+            cd build/packages
+            find . -maxdepth 1 -type f ! -name SHA256SUMS ! -name '*.asc' \
+              -printf '%f\0' | sort -z | xargs -0 sha256sum -- > SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+
+      - name: Upload unsigned release candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: providentia-admin-linux-${{ needs.preflight.outputs.version }}
+          path: build/packages
+          if-no-files-found: error
+          retention-days: 30
+
+  smoke:
+    name: Clean-host install, linkage and launch
+    needs: [preflight, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out verification source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Download release candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: providentia-admin-linux-${{ needs.preflight.outputs.version }}
+          path: build/packages
+
+      - name: Install candidate on clean Ubuntu host
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            dbus-x11 desktop-file-utils xvfb
+          (cd build/packages && sha256sum --check SHA256SUMS)
+          deb="$(find build/packages -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$deb"
+          sudo apt-get install -y --no-install-recommends "$(realpath "$deb")"
+          dpkg-query --show --showformat='${Status}\n' providentia-admin \
+            | grep -Fqx 'install ok installed'
+
+      - name: Verify native linkage and Xvfb launch
+        env:
+          PROVIDENTIA_LINUX_INSTALLED_BINARY: /usr/bin/providentia_admin
+          PROVIDENTIA_LINUX_LAUNCH_SMOKE: 'true'
+        run: |
+          deb="$(find build/packages -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          bash tool/verify_linux_deb.sh "$deb"
+
+  publish:
+    name: Sign and publish protected Linux release
+    needs: [preflight, build, smoke]
+    if: needs.preflight.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    environment: production-release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LINUX_SIGNING_KEY_BASE64: ${{ secrets.LINUX_SIGNING_KEY_BASE64 }}
+      LINUX_SIGNING_KEY_ID: ${{ secrets.LINUX_SIGNING_KEY_ID }}
+      LINUX_SIGNING_PASSPHRASE: ${{ secrets.LINUX_SIGNING_PASSPHRASE }}
+      RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+    steps:
+      - name: Check out release ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Download verified release candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: providentia-admin-linux-${{ needs.preflight.outputs.version }}
+          path: build/packages
+
+      - name: Sign and verify Linux artifacts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gnupg
+          bash tool/sign_linux_artifacts.sh build/packages
+
+      - name: Publish immutable GitHub release
+        run: |
+          gh release create "v${RELEASE_VERSION}" build/packages/* \
+            --verify-tag \
+            --title "Providentia Admin v${RELEASE_VERSION}" \
+            --generate-notes

@@ -19,8 +19,10 @@ ANALYZER_STATE_PATH="${PROVIDENTIA_ANALYZER_STATE_LOCATION:-${XDG_CACHE_PATH}/da
 
 install_linux_packages() {
   local packages=(
-    ca-certificates clang cmake coreutils curl git gzip jq libgtk-3-dev liblzma-dev
-    libsecret-1-dev ninja-build pkg-config ripgrep unzip xz-utils zip
+    ca-certificates clang cmake coreutils curl dbus-x11 desktop-file-utils
+    dpkg-dev git gnupg gzip jq libegl1 libgles2 libgtk-3-0 libgtk-3-dev liblzma-dev
+    libsecret-1-0 libsecret-1-dev ninja-build pkg-config ripgrep unzip xvfb
+    xz-utils zip
   )
   if ! command -v apt-get >/dev/null 2>&1; then
     echo "Unsupported host package manager. Install tools/agent-requirements.json manually." >&2

@@ -17,4 +17,5 @@ OpenAPI lock before changing runtime behavior.
 - Update backend runtime and contract first, then copy the exact contract and
   lock here. Handwritten endpoint drift is rejected by CI.
 - Run `bash tools/agent-check.sh` before declaring work complete. It is the
-  canonical format, contract, analysis, test, coverage and Linux release gate.
+  canonical format, contract, analysis, test, coverage, package verification
+  and Xvfb Linux launch gate.
