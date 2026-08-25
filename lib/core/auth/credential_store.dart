@@ -1,0 +1,63 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+abstract interface class CredentialStore {
+  Future<Map<String, String>> readSession();
+  Future<void> writeSession(Map<String, String> values);
+  Future<void> clearSession();
+  Future<String?> readInstallationId();
+  Future<void> writeInstallationId(String value);
+}
+
+final class SecureCredentialStore implements CredentialStore {
+  SecureCredentialStore({FlutterSecureStorage? storage})
+    : _storage = storage ?? const FlutterSecureStorage();
+
+  final FlutterSecureStorage _storage;
+  static const _prefix = 'providentia.admin.';
+  static const _sessionKeys = <String>[
+    'accessToken',
+    'refreshToken',
+    'sessionId',
+    'deviceId',
+    'userId',
+    'accessExpiresAt',
+    'refreshExpiresAt',
+    'idleExpiresAt',
+  ];
+
+  @override
+  Future<void> clearSession() async {
+    for (final key in _sessionKeys) {
+      await _storage.delete(key: '$_prefix$key');
+    }
+  }
+
+  @override
+  Future<String?> readInstallationId() =>
+      _storage.read(key: '${_prefix}installationId');
+
+  @override
+  Future<Map<String, String>> readSession() async {
+    final result = <String, String>{};
+    for (final key in _sessionKeys) {
+      final value = await _storage.read(key: '$_prefix$key');
+      if (value != null) result[key] = value;
+    }
+    return result;
+  }
+
+  @override
+  Future<void> writeInstallationId(String value) =>
+      _storage.write(key: '${_prefix}installationId', value: value);
+
+  @override
+  Future<void> writeSession(Map<String, String> values) async {
+    await clearSession();
+    for (final entry in values.entries) {
+      if (_sessionKeys.contains(entry.key)) {
+        await _storage.write(key: '$_prefix${entry.key}', value: entry.value);
+      }
+    }
+  }
+}
+
