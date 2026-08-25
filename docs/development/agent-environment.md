@@ -31,6 +31,7 @@ HTTPS backend origin. No PayPal or AI provider network access belongs in Admin.
 dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test --coverage
+bash tool/materialize_contract.sh
 bash tools/verify-structure.sh
 flutter build linux --release \
   --dart-define=PROVIDENTIA_API_BASE_URL=https://api.example.invalid

@@ -18,6 +18,7 @@
       "cmake",
       "curl",
       "git",
+      "gzip",
       "jq",
       "libgtk-3-dev",
       "liblzma-dev",
@@ -46,6 +47,7 @@
     "the configured PROVIDENTIA_API_BASE_URL over HTTPS"
   ],
   "validation": [
+    "bash tool/materialize_contract.sh",
     "dart format --output=none --set-exit-if-changed .",
     "flutter analyze",
     "flutter test --coverage",

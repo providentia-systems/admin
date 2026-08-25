@@ -5,6 +5,7 @@
 .pub-cache/
 .agent-env
 .agent-tools*/
+contracts/providentia-v1.json
 build/
 coverage/
 linux/flutter/ephemeral/
