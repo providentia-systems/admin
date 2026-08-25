@@ -32,14 +32,14 @@ final class LoginLinkChallenge {
 
 final class SessionController extends ChangeNotifier {
   SessionController({
-    required ApiClient api,
+    required AdminApi api,
     required CredentialStore credentialStore,
     Uuid uuid = const Uuid(),
   }) : _api = api,
        _credentialStore = credentialStore,
        _uuid = uuid;
 
-  final ApiClient _api;
+  final AdminApi _api;
   final CredentialStore _credentialStore;
   final Uuid _uuid;
 
@@ -271,4 +271,3 @@ final class SessionController extends ChangeNotifier {
   static String _challengeFor(String value) =>
       base64Url.encode(sha256.convert(ascii.encode(value)).bytes).replaceAll('=', '');
 }
-
