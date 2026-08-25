@@ -57,7 +57,7 @@
   ],
   "coverage": {
     "scope": "all handwritten Dart production libraries under lib/",
-    "minimumLineCoveragePercent": 44,
+    "minimumLineCoveragePercent": 46,
     "targetLineCoveragePercent": 80,
     "policy": ".coverage-policy.json"
   },

@@ -68,7 +68,7 @@ if grep -En '^[[:space:]]+(camera|drift|drift_flutter|file_picker|image_picker|s
   exit 1
 fi
 
-EXPECTED="f01c320e1900f523661bbba24225583f1d61bc00f3949cb0e7b5b2f6fd5a524e"
+EXPECTED="aa207f0d9adbf2df36e1fd9c420d340da2bb2948a638c95f0610d40c1a0124fc"
 ACTUAL="$(sha256sum contracts/providentia-v1.json | cut -d' ' -f1)"
 test "${ACTUAL}" = "${EXPECTED}"
 

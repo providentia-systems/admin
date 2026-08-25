@@ -44,23 +44,41 @@ final class CatalogQueueItem {
 }
 
 final class PublishedCategory {
-  const PublishedCategory({
+  PublishedCategory({
     required this.id,
     required this.canonicalName,
     required this.revision,
-  });
+  }) {
+    if (!_uuidPattern.hasMatch(id) ||
+        canonicalName.trim().isEmpty ||
+        canonicalName.length > 191 ||
+        revision < 1) {
+      throw const FormatException('Invalid published category.');
+    }
+  }
 
-  factory PublishedCategory.fromJson(Map<String, Object?> json) =>
-      PublishedCategory(
-        id: json['id']! as String,
-        canonicalName: json['canonicalName']! as String,
-        revision: json['revision']! as int,
-      );
+  factory PublishedCategory.fromJson(Map<String, Object?> json) {
+    final id = json['id'];
+    final canonicalName = json['canonicalName'];
+    final revision = json['revision'];
+    if (id is! String || canonicalName is! String || revision is! int) {
+      throw const FormatException('Invalid published category.');
+    }
+    return PublishedCategory(
+      id: id,
+      canonicalName: canonicalName,
+      revision: revision,
+    );
+  }
 
   final String id;
   final String canonicalName;
   final int revision;
 }
+
+final RegExp _uuidPattern = RegExp(
+  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+);
 
 final class ModerationPreview {
   ModerationPreview({
