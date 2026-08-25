@@ -1,7 +1,7 @@
 # Canonical API contract source
 
 `providentia-v1.json.gz` is a deterministic (`gzip -n`) transport of the
-Providentia backend API 1.15.0 OpenAPI contract. The uncompressed contract is
+Providentia backend API 1.16.0 OpenAPI contract. The uncompressed contract is
 generated locally by `tool/materialize_contract.sh` and is intentionally not
 stored twice in Git.
 

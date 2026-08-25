@@ -1,6 +1,6 @@
 // GENERATED FILE - DO NOT EDIT.
 // Source: contracts/providentia-v1.json
-// Contract SHA-256: 61d49a5b0c857b532e27cfc243a2701731f7b0f2c4d5f5ab39d3fb0636790cdd
+// Contract SHA-256: f01c320e1900f523661bbba24225583f1d61bc00f3949cb0e7b5b2f6fd5a524e
 // This facade deliberately excludes every household endpoint.
 
 library;
@@ -57,6 +57,11 @@ const adminApiOperations = <String, AdminApiOperation>{
     operationId: 'decideCatalogProposal',
     method: 'POST',
     pathTemplate: '/api/v1/catalog-admin/proposals/{proposalId}/decision',
+  ),
+  'decideLoginLinkApproval': AdminApiOperation(
+    operationId: 'decideLoginLinkApproval',
+    method: 'POST',
+    pathTemplate: '/api/v1/auth/login-links/{requestId}/decision',
   ),
   'exchangeLoginLink': AdminApiOperation(
     operationId: 'exchangeLoginLink',
@@ -143,6 +148,11 @@ const adminApiOperations = <String, AdminApiOperation>{
     method: 'POST',
     pathTemplate: '/api/v1/catalog-admin/merges/preview',
   ),
+  'proveLoginLinkApproval': AdminApiOperation(
+    operationId: 'proveLoginLinkApproval',
+    method: 'POST',
+    pathTemplate: '/api/v1/auth/login-links/{requestId}/proof',
+  ),
   'putBillingEntitlement': AdminApiOperation(
     operationId: 'putBillingEntitlement',
     method: 'PUT',
@@ -177,6 +187,11 @@ const adminApiOperations = <String, AdminApiOperation>{
     operationId: 'reverseCatalogMerge',
     method: 'POST',
     pathTemplate: '/api/v1/catalog-admin/merges/{mergeId}/reverse',
+  ),
+  'reviewLoginLinkApproval': AdminApiOperation(
+    operationId: 'reviewLoginLinkApproval',
+    method: 'POST',
+    pathTemplate: '/api/v1/auth/login-links/{requestId}/review',
   ),
   'revokeHomeBillingOverride': AdminApiOperation(
     operationId: 'revokeHomeBillingOverride',

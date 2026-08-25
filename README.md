@@ -40,7 +40,8 @@ flutter run -d linux \
 
 See [the agent environment guide](docs/development/agent-environment.md) for the
 pinned toolchain, host dependencies, network allowlist and complete validation
-lane. The canonical backend contract is frozen under `contracts/openapi/`.
+lane. The canonical backend contract is checksum-pinned under
+`contracts/source/` and materialized only for validation and generation.
 
 ## Security invariants
 

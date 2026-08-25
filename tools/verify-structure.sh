@@ -18,6 +18,7 @@ test -f contracts/contract.lock.json
 test -f contracts/generated/providentia_api_client/lib/providentia_api_client.dart
 test -f tools/agent-requirements.json
 test -f tools/agent-setup.sh
+test ! -f tool/generate_api_client.mjs
 bash tool/materialize_contract.sh
 bash -n tools/agent-setup.sh tool/install_flutter_linux.sh \
   tool/materialize_contract.sh \
@@ -62,7 +63,7 @@ if grep -En '^[[:space:]]+(camera|drift|drift_flutter|file_picker|image_picker|s
   exit 1
 fi
 
-EXPECTED="61d49a5b0c857b532e27cfc243a2701731f7b0f2c4d5f5ab39d3fb0636790cdd"
+EXPECTED="f01c320e1900f523661bbba24225583f1d61bc00f3949cb0e7b5b2f6fd5a524e"
 ACTUAL="$(sha256sum contracts/providentia-v1.json | cut -d' ' -f1)"
 test "${ACTUAL}" = "${EXPECTED}"
 

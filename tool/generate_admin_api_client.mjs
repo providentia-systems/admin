@@ -20,6 +20,9 @@ const check = process.argv.includes('--check');
 
 const allowed = new Set([
   'startLoginLink',
+  'proveLoginLinkApproval',
+  'reviewLoginLinkApproval',
+  'decideLoginLinkApproval',
   'getLoginLinkStatus',
   'exchangeLoginLink',
   'cancelLoginLink',
@@ -181,4 +184,3 @@ AdminApiOperation requireAdminApiOperation(String operationId) {
 function relative(file) {
   return path.relative(root, file).split(path.sep).join('/');
 }
-
