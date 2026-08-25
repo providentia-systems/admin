@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/auth/session_controller.dart';
 import 'catalog_models.dart';
 import 'catalog_repository.dart';
 
@@ -11,12 +12,14 @@ enum _CatalogLane { proposals, contributions }
 final class CatalogPage extends StatefulWidget {
   const CatalogPage({
     required this.api,
+    required this.session,
     required this.canReview,
     required this.canCurate,
     super.key,
   });
 
   final AdminApi api;
+  final SessionController session;
   final bool canReview;
   final bool canCurate;
 
@@ -26,10 +29,10 @@ final class CatalogPage extends StatefulWidget {
 
 class _CatalogPageState extends State<CatalogPage> {
   late final CatalogRepository _repository;
-  var _lane = _CatalogLane.proposals;
+  late _CatalogLane _lane;
   var _queue = 'proposals';
   var _loading = true;
-  Object? _error;
+  var _hasError = false;
   List<CatalogQueueItem> _items = const <CatalogQueueItem>[];
   CatalogQueueItem? _selected;
   ModerationPreview? _preview;
@@ -38,6 +41,9 @@ class _CatalogPageState extends State<CatalogPage> {
   void initState() {
     super.initState();
     _repository = CatalogRepository(widget.api);
+    _lane = widget.canReview
+        ? _CatalogLane.proposals
+        : _CatalogLane.contributions;
     unawaited(_load());
   }
 
@@ -65,13 +71,14 @@ class _CatalogPageState extends State<CatalogPage> {
         Row(
           children: <Widget>[
             SegmentedButton<_CatalogLane>(
-              segments: const <ButtonSegment<_CatalogLane>>[
-                ButtonSegment(
+              segments: <ButtonSegment<_CatalogLane>>[
+                if (widget.canReview)
+                  const ButtonSegment(
                   value: _CatalogLane.proposals,
                   label: Text('Catalog workbench'),
                   icon: Icon(Icons.rule_folder_outlined),
                 ),
-                ButtonSegment(
+                const ButtonSegment(
                   value: _CatalogLane.contributions,
                   label: Text('Contributions'),
                   icon: Icon(Icons.volunteer_activism_outlined),
@@ -117,9 +124,9 @@ class _CatalogPageState extends State<CatalogPage> {
           ],
         ),
         const SizedBox(height: 12),
-        if (_error case final error?)
+        if (_hasError)
           MaterialBanner(
-            content: Text('Could not load moderation queue: $error'),
+            content: const Text('The moderation queue could not be loaded.'),
             actions: <Widget>[
               TextButton(onPressed: _load, child: const Text('Retry')),
             ],
@@ -183,24 +190,25 @@ class _CatalogPageState extends State<CatalogPage> {
   );
 
   Future<void> _load() async {
+    final epoch = widget.session.authorizationEpoch;
     setState(() {
       _loading = true;
-      _error = null;
+      _hasError = false;
     });
     try {
       final items = _lane == _CatalogLane.proposals
           ? await _repository.workbench(queue: _queue)
           : await _repository.contributionReview();
-      if (!mounted) return;
+      if (!_isAuthorized(epoch)) return;
       setState(() {
         _items = items;
         _loading = false;
       });
-    } on Object catch (error) {
-      if (!mounted) return;
+    } on Object {
+      if (!_isAuthorized(epoch)) return;
       setState(() {
         _loading = false;
-        _error = error;
+        _hasError = true;
       });
     }
   }
@@ -233,7 +241,7 @@ class _CatalogPageState extends State<CatalogPage> {
       setState(() => _selected = null);
       await _load();
     } on ApiException catch (error) {
-      if (mounted) _snack(error.message);
+      if (mounted) _snack(_safeApiMessage(error));
       if (error.isConflict) await _load();
     }
   }
@@ -242,15 +250,19 @@ class _CatalogPageState extends State<CatalogPage> {
     final item = _selected;
     if (item == null) return;
     try {
-      final preview = await _repository.imagePreview(item.id);
-      if (!mounted || _selected?.id != item.id) {
+      final epoch = widget.session.authorizationEpoch;
+      final preview = await _repository.imagePreview(
+        item.id,
+        expectedRevision: item.revision,
+      );
+      if (!_isAuthorized(epoch) || _selected?.id != item.id) {
         preview.dispose();
         return;
       }
       _clearPreview();
       setState(() => _preview = preview);
-    } on Object catch (error) {
-      if (mounted) _snack('Preview rejected: $error');
+    } on Object {
+      if (mounted) _snack('The moderation preview failed safety validation.');
     }
   }
 
@@ -282,7 +294,7 @@ class _CatalogPageState extends State<CatalogPage> {
       );
       await _load();
     } on ApiException catch (error) {
-      if (mounted) _snack(error.message);
+      if (mounted) _snack(_safeApiMessage(error));
       if (error.isConflict) await _load();
     }
   }
@@ -306,7 +318,7 @@ class _CatalogPageState extends State<CatalogPage> {
       _clearPreview();
       await _load();
     } on ApiException catch (error) {
-      if (mounted) _snack(error.message);
+      if (mounted) _snack(_safeApiMessage(error));
       if (error.isConflict) await _load();
     }
   }
@@ -348,6 +360,15 @@ class _CatalogPageState extends State<CatalogPage> {
   void _snack(String message) => ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(message)));
+
+  bool _isAuthorized(int epoch) =>
+      mounted &&
+      widget.session.phase == SessionPhase.authenticated &&
+      widget.session.authorizationEpoch == epoch;
+
+  static String _safeApiMessage(ApiException error) => error.isConflict
+      ? 'This item changed on the server. The queue was reloaded.'
+      : 'The moderation operation was rejected (HTTP ${error.statusCode}).';
 }
 
 final class _ModerationDetail extends StatelessWidget {
@@ -467,4 +488,3 @@ final class _ModerationDetail extends StatelessWidget {
         normalized.contains('providerreference');
   }
 }
-

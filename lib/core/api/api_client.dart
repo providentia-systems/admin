@@ -2,7 +2,30 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
-import 'package:uuid/uuid.dart';
+
+import '../security/secure_id.dart';
+
+const _maximumResponseBytes = 8 * 1024 * 1024;
+
+Uri validateBackendUri(Uri uri) {
+  final local = uri.host == 'localhost' ||
+      uri.host == '127.0.0.1' ||
+      uri.host == '::1';
+  if (!uri.hasScheme || !uri.hasAuthority || uri.host.isEmpty) {
+    throw const FormatException('The backend base URL must be absolute.');
+  }
+  if (uri.scheme != 'https' && !(local && uri.scheme == 'http')) {
+    throw const FormatException(
+      'The backend requires HTTPS except on the local loopback interface.',
+    );
+  }
+  if (uri.userInfo.isNotEmpty || uri.hasQuery || uri.hasFragment) {
+    throw const FormatException(
+      'The backend base URL cannot contain credentials, query, or fragment.',
+    );
+  }
+  return uri;
+}
 
 typedef AccessTokenProvider = String? Function();
 typedef AuthorizationLostCallback = void Function();
@@ -93,7 +116,6 @@ final class ApiClient implements AdminApi {
   final http.Client _http;
   final AccessTokenProvider _accessTokenProvider;
   final AuthorizationLostCallback _onAuthorizationLost;
-  static const _uuid = Uuid();
 
   Future<ApiResponse> get(
     String path, {
@@ -140,7 +162,7 @@ final class ApiClient implements AdminApi {
     final request = http.Request(method, uri);
     request.headers.addAll(<String, String>{
       'Accept': 'application/json',
-      'X-Request-ID': _uuid.v4(),
+      'X-Request-ID': newUuidV4(),
       if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       ...?headers,
     });
@@ -150,7 +172,20 @@ final class ApiClient implements AdminApi {
     }
 
     final streamed = await _http.send(request);
-    final bytes = await streamed.stream.toBytes();
+    final declaredLength = streamed.contentLength;
+    if (declaredLength != null && declaredLength > _maximumResponseBytes) {
+      throw const FormatException('The server response exceeded the safety limit.');
+    }
+    final builder = BytesBuilder(copy: false);
+    var received = 0;
+    await for (final chunk in streamed.stream) {
+      received += chunk.length;
+      if (received > _maximumResponseBytes) {
+        throw const FormatException('The server response exceeded the safety limit.');
+      }
+      builder.add(chunk);
+    }
+    final bytes = builder.takeBytes();
     final response = ApiResponse(
       statusCode: streamed.statusCode,
       headers: streamed.headers,

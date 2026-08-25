@@ -63,8 +63,8 @@ final class OperatorHome {
     return OperatorHome(
       homeId: json['homeId']! as String,
       name: json['name']! as String,
-      role: json['role']! as String,
-      status: json['status']! as String,
+      role: json['membershipRole']! as String,
+      status: json['membershipStatus']! as String,
       subscriptionStatus: subscription is Map<String, Object?>
           ? subscription['status'] as String?
           : null,
@@ -111,4 +111,3 @@ final class OperatorAccountPage {
   final int offset;
   final int total;
 }
-

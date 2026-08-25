@@ -3,8 +3,8 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOL_CACHE="${PROVIDENTIA_AGENT_CACHE:-${PROJECT_ROOT}/.agent-tools}"
-FLUTTER_VERSION="3.47.1"
-FLUTTER_SHA256="a1d8166c0309267cb7dc99f1424eecf08b86946ad3b50723c6f59945964aea45"
+FLUTTER_VERSION="3.44.7"
+FLUTTER_SHA256="a0edd646c159c0e816788c0e46a4f071199c1320495898f5a679599b583a05a4"
 FLUTTER_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
 FLUTTER_ROOT="${TOOL_CACHE}/flutter-${FLUTTER_VERSION}"
 
@@ -69,9 +69,8 @@ flutter pub get
 cat > "${PROJECT_ROOT}/.agent-env" <<EOF
 export PATH="${FLUTTER_ROOT}/bin:\${PATH}"
 export PUB_CACHE="${PUB_CACHE}"
-export PROVIDENTIA_API_URL="${PROVIDENTIA_API_URL:-http://localhost:8080}"
+export PROVIDENTIA_API_BASE_URL="${PROVIDENTIA_API_BASE_URL:-http://localhost:8080}"
 EOF
 
 flutter doctor -v
 echo "Agent environment ready. Source ${PROJECT_ROOT}/.agent-env before validating."
-

@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/auth/session_controller.dart';
 import 'billing_repository.dart';
 
 final class BillingPage extends StatefulWidget {
-  const BillingPage({required this.api, super.key});
+  const BillingPage({required this.api, required this.session, super.key});
   final AdminApi api;
+  final SessionController session;
 
   @override
   State<BillingPage> createState() => _BillingPageState();
@@ -16,7 +18,7 @@ final class BillingPage extends StatefulWidget {
 class _BillingPageState extends State<BillingPage> {
   late final BillingRepository _repository;
   List<BillingPlan>? _plans;
-  Object? _error;
+  var _hasError = false;
 
   @override
   void initState() {
@@ -44,9 +46,9 @@ class _BillingPageState extends State<BillingPage> {
           ),
         ),
         const SizedBox(height: 16),
-        if (_error case final error?)
+        if (_hasError)
           MaterialBanner(
-            content: Text('Could not load billing plans: $error'),
+            content: const Text('The billing plan list could not be loaded.'),
             actions: <Widget>[
               TextButton(onPressed: _load, child: const Text('Retry')),
             ],
@@ -76,16 +78,21 @@ class _BillingPageState extends State<BillingPage> {
   );
 
   Future<void> _load() async {
+    final epoch = widget.session.authorizationEpoch;
     setState(() {
       _plans = null;
-      _error = null;
+      _hasError = false;
     });
     try {
       final plans = await _repository.listPlans();
-      if (mounted) setState(() => _plans = plans);
-    } on Object catch (error) {
-      if (mounted) setState(() => _error = error);
+      if (_isAuthorized(epoch)) setState(() => _plans = plans);
+    } on Object {
+      if (_isAuthorized(epoch)) setState(() => _hasError = true);
     }
   }
-}
 
+  bool _isAuthorized(int epoch) =>
+      mounted &&
+      widget.session.phase == SessionPhase.authenticated &&
+      widget.session.authorizationEpoch == epoch;
+}

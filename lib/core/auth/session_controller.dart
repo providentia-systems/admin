@@ -3,10 +3,9 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart';
 
 import '../api/api_client.dart';
+import '../security/secure_id.dart';
 import 'credential_store.dart';
 import 'operator_authorization.dart';
 
@@ -34,14 +33,11 @@ final class SessionController extends ChangeNotifier {
   SessionController({
     required AdminApi api,
     required CredentialStore credentialStore,
-    Uuid uuid = const Uuid(),
   }) : _api = api,
-       _credentialStore = credentialStore,
-       _uuid = uuid;
+       _credentialStore = credentialStore;
 
   final AdminApi _api;
   final CredentialStore _credentialStore;
-  final Uuid _uuid;
 
   SessionPhase _phase = SessionPhase.restoring;
   OperatorAuthorization _authorization = OperatorAuthorization.none;
@@ -67,7 +63,7 @@ final class SessionController extends ChangeNotifier {
     notifyListeners();
     _installationId = await _credentialStore.readInstallationId();
     if (_installationId == null) {
-      _installationId = _uuid.v4();
+      _installationId = newUuidV4();
       await _credentialStore.writeInstallationId(_installationId!);
     }
     final stored = await _credentialStore.readSession();
@@ -80,18 +76,17 @@ final class SessionController extends ChangeNotifier {
     }
     try {
       await _bootstrapAuthorization();
-    } on Object catch (exception) {
+    } on Object {
       await _purgeSession('Your administrator session must be renewed.');
-      if (kDebugMode) _error = exception.toString();
     }
   }
 
   Future<void> startLoginLink(String email) async {
     _error = null;
-    final installationId = _installationId ?? _uuid.v4();
+    final installationId = _installationId ?? newUuidV4();
     _installationId = installationId;
     await _credentialStore.writeInstallationId(installationId);
-    final requestId = _uuid.v4();
+    final requestId = newUuidV4();
     final pollToken = _secret(32);
     final verifier = _secret(64);
     final state = _secret(32);

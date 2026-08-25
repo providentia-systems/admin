@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "repositoryRole": "linux-admin-client",
   "runtime": {
-    "flutter": "3.47.1",
-    "dart": "3.13.1"
+    "flutter": "3.44.7",
+    "dart": "3.12.2"
   },
   "flutterDownload": {
     "linuxX64": {
-      "url": "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.47.1-stable.tar.xz",
-      "sha256": "a1d8166c0309267cb7dc99f1424eecf08b86946ad3b50723c6f59945964aea45"
+      "url": "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.44.7-stable.tar.xz",
+      "sha256": "a0edd646c159c0e816788c0e46a4f071199c1320495898f5a679599b583a05a4"
     }
   },
   "linux": {
@@ -43,7 +43,7 @@
     "api.pub.dev"
   ],
   "runtimeNetwork": [
-    "the configured PROVIDENTIA_API_URL over HTTPS"
+    "the configured PROVIDENTIA_API_BASE_URL over HTTPS"
   ],
   "validation": [
     "dart format --output=none --set-exit-if-changed .",
@@ -53,4 +53,3 @@
     "flutter build linux --release"
   ]
 }
-
