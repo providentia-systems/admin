@@ -4,6 +4,9 @@ abstract interface class CredentialStore {
   Future<Map<String, String>> readSession();
   Future<void> writeSession(Map<String, String> values);
   Future<void> clearSession();
+  Future<Map<String, String>> readPendingLogin();
+  Future<void> writePendingLogin(Map<String, String> values);
+  Future<void> clearPendingLogin();
   Future<String?> readInstallationId();
   Future<void> writeInstallationId(String value);
 }
@@ -24,11 +27,26 @@ final class SecureCredentialStore implements CredentialStore {
     'refreshExpiresAt',
     'idleExpiresAt',
   ];
+  static const _pendingKeys = <String>[
+    'requestId',
+    'pollToken',
+    'codeVerifier',
+    'state',
+    'expiresAt',
+    'pollIntervalSeconds',
+  ];
 
   @override
   Future<void> clearSession() async {
     for (final key in _sessionKeys) {
       await _storage.delete(key: '$_prefix$key');
+    }
+  }
+
+  @override
+  Future<void> clearPendingLogin() async {
+    for (final key in _pendingKeys) {
+      await _storage.delete(key: '${_prefix}pending.$key');
     }
   }
 
@@ -47,6 +65,16 @@ final class SecureCredentialStore implements CredentialStore {
   }
 
   @override
+  Future<Map<String, String>> readPendingLogin() async {
+    final result = <String, String>{};
+    for (final key in _pendingKeys) {
+      final value = await _storage.read(key: '${_prefix}pending.$key');
+      if (value != null) result[key] = value;
+    }
+    return result;
+  }
+
+  @override
   Future<void> writeInstallationId(String value) =>
       _storage.write(key: '${_prefix}installationId', value: value);
 
@@ -59,5 +87,17 @@ final class SecureCredentialStore implements CredentialStore {
       }
     }
   }
-}
 
+  @override
+  Future<void> writePendingLogin(Map<String, String> values) async {
+    await clearPendingLogin();
+    for (final entry in values.entries) {
+      if (_pendingKeys.contains(entry.key)) {
+        await _storage.write(
+          key: '${_prefix}pending.${entry.key}',
+          value: entry.value,
+        );
+      }
+    }
+  }
+}

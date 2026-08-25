@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+exec /opt/providentia-admin/providentia_admin "$@"
+

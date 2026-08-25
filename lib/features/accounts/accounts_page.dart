@@ -26,6 +26,7 @@ class _AccountsPageState extends State<AccountsPage> {
   String? _status;
   var _hasError = false;
   var _loading = true;
+  var _offset = 0;
 
   @override
   void initState() {
@@ -66,7 +67,10 @@ class _AccountsPageState extends State<AccountsPage> {
                   _debounce?.cancel();
                   _debounce = Timer(
                     const Duration(milliseconds: 350),
-                    () => unawaited(_load()),
+                    () {
+                      _offset = 0;
+                      unawaited(_load());
+                    },
                   );
                 },
               ),
@@ -82,7 +86,10 @@ class _AccountsPageState extends State<AccountsPage> {
                 DropdownMenuItem(value: 'closed', child: Text('Closed')),
               ],
               onChanged: (value) {
-                setState(() => _status = value);
+                setState(() {
+                  _status = value;
+                  _offset = 0;
+                });
                 unawaited(_load());
               },
             ),
@@ -98,6 +105,44 @@ class _AccountsPageState extends State<AccountsPage> {
         if (_hasError)
           _ErrorBanner(retry: _load),
         if (_loading) const LinearProgressIndicator(),
+        const SizedBox(height: 8),
+        Row(
+          children: <Widget>[
+            Text(
+              _page == null
+                  ? 'No results loaded'
+                  : '${_offset + 1}-${_offset + _page!.data.length} of ${_page!.total}',
+            ),
+            const Spacer(),
+            IconButton(
+              tooltip: 'Previous page',
+              onPressed: _loading || _offset == 0
+                  ? null
+                  : () {
+                      setState(() {
+                        _offset = (_offset - (_page?.limit ?? 50)).clamp(
+                          0,
+                          _offset,
+                        );
+                      });
+                      unawaited(_load());
+                    },
+              icon: const Icon(Icons.chevron_left),
+            ),
+            IconButton(
+              tooltip: 'Next page',
+              onPressed: _loading ||
+                      _page == null ||
+                      _offset + _page!.data.length >= _page!.total
+                  ? null
+                  : () {
+                      setState(() => _offset += _page!.limit);
+                      unawaited(_load());
+                    },
+              icon: const Icon(Icons.chevron_right),
+            ),
+          ],
+        ),
         const SizedBox(height: 8),
         Expanded(
           child: Row(
@@ -145,6 +190,7 @@ class _AccountsPageState extends State<AccountsPage> {
       final page = await _repository.list(
         search: _search.text,
         status: _status,
+        offset: _offset,
       );
       if (!_isAuthorized(epoch)) return;
       setState(() {
@@ -181,6 +227,7 @@ class _AccountsPageState extends State<AccountsPage> {
   Future<void> _changeStatus(String status) async {
     final selected = _selected;
     if (selected == null) return;
+    final epoch = widget.session.authorizationEpoch;
     final reason = await _reasonDialog(
       title: '${status[0].toUpperCase()}${status.substring(1)} account',
     );
@@ -192,7 +239,11 @@ class _AccountsPageState extends State<AccountsPage> {
         reason: reason,
         expectedRevision: selected.revision,
       );
-      if (!mounted) return;
+      if (!_isAuthorized(epoch)) return;
+      if (selected.userId == widget.session.userId && status != 'active') {
+        widget.session.authorizationLost();
+        return;
+      }
       setState(() => _selected = updated);
       await _load();
     } on ApiException catch (error) {
@@ -204,6 +255,7 @@ class _AccountsPageState extends State<AccountsPage> {
   Future<void> _changeRole(String role, bool grant) async {
     final selected = _selected;
     if (selected == null) return;
+    final epoch = widget.session.authorizationEpoch;
     try {
       final updated = await _repository.changeRole(
         userId: selected.userId,
@@ -211,7 +263,11 @@ class _AccountsPageState extends State<AccountsPage> {
         expectedRevision: selected.revision,
         grant: grant,
       );
-      if (!mounted) return;
+      if (!_isAuthorized(epoch)) return;
+      if (selected.userId == widget.session.userId) {
+        await widget.session.refreshAuthorization();
+        if (!_isAuthorized(epoch)) return;
+      }
       setState(() => _selected = updated);
       await _load();
     } on ApiException catch (error) {

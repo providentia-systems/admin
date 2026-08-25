@@ -1,0 +1,103 @@
+name: Admin quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'codex/**'
+      - 'feature/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Format, analyze, test and contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Verify source-only boundaries
+        run: bash tools/verify-structure.sh
+
+      - name: Install pinned Flutter SDK
+        run: |
+          tool/install_flutter_linux.sh "$RUNNER_TEMP/providentia-sdk"
+          echo "$RUNNER_TEMP/providentia-sdk/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve locked dependencies
+        run: |
+          test -f pubspec.lock
+          flutter pub get --enforce-lockfile
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: Test
+        run: flutter test --coverage
+
+      - name: Produce dependency inventory
+        run: |
+          mkdir -p build/compliance
+          dart pub deps --json > build/compliance/dart-dependencies.json
+
+      - name: Upload quality evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: admin-quality-evidence
+          path: |
+            coverage/lcov.info
+            build/compliance/dart-dependencies.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  linux-release-build:
+    name: Linux release and packages
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake curl dpkg-dev libgtk-3-dev liblzma-dev \
+            libsecret-1-dev ninja-build pkg-config
+
+      - name: Install pinned Flutter SDK
+        run: |
+          tool/install_flutter_linux.sh "$RUNNER_TEMP/providentia-sdk"
+          echo "$RUNNER_TEMP/providentia-sdk/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Build Linux release
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter build linux --release \
+            --dart-define=PROVIDENTIA_API_BASE_URL=https://api.example.invalid
+
+      - name: Package Linux release
+        run: bash packaging/linux/build-packages.sh
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: providentia-admin-linux
+          path: build/packages
+          if-no-files-found: error
+          retention-days: 14
+
