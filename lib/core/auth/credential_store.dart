@@ -17,6 +17,10 @@ final class SecureCredentialStore implements CredentialStore {
 
   final FlutterSecureStorage _storage;
   static const _prefix = 'providentia.admin.';
+  // refreshExpiresAt, idleExpiresAt and refreshIdleTtlSeconds are nullable:
+  // a durable trusted-device session has no inactivity ceiling, so those
+  // bounds are persisted only when the backend actually issued them. A null
+  // bound is represented by the key being absent from the keyring.
   static const _sessionKeys = <String>[
     'accessToken',
     'refreshToken',
@@ -85,7 +89,7 @@ final class SecureCredentialStore implements CredentialStore {
   Future<void> writeSession(Map<String, String> values) async {
     await clearSession();
     for (final entry in values.entries) {
-      if (_sessionKeys.contains(entry.key)) {
+      if (_sessionKeys.contains(entry.key) && entry.value.isNotEmpty) {
         await _storage.write(key: '$_prefix${entry.key}', value: entry.value);
       }
     }

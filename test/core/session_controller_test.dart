@@ -72,6 +72,11 @@ Map<String, String> storedSession() => <String, String>{
   'transport': 'native',
 };
 
+Map<String, String> durableStoredSession() => storedSession()
+  ..remove('refreshExpiresAt')
+  ..remove('idleExpiresAt')
+  ..remove('refreshIdleTtlSeconds');
+
 Map<String, Object?> rotatedSession({
   String accessToken = 'rotated-access-token',
   String refreshToken = 'rotated-refresh-token',
@@ -186,32 +191,69 @@ void main() {
   });
 
   test(
-    'password-reset completion revokes memory and both keyring tuples',
+    'sign out revokes memory synchronously and clears both keyring tuples',
     () async {
       final store = MemoryCredentialStore()
         ..installationId = installationId
         ..session = storedSession()
         ..pending = <String, String>{'requestId': 'pending-secret'};
-      final api = FakeApi(
-        (_) async => jsonResponse(<String, Object?>{
-          'userId': storedSession()['userId'],
-          'platformRoles': <Object?>['platform_administrator'],
-        }),
-      );
+      final api = FakeApi((request) async {
+        if (request.path == '/api/v1/me') {
+          return jsonResponse(<String, Object?>{
+            'userId': storedSession()['userId'],
+            'platformRoles': <Object?>['platform_administrator'],
+          });
+        }
+        if (request.path == '/api/v1/auth/logout') {
+          return jsonResponse(const <String, Object?>{});
+        }
+        throw StateError('unexpected ${request.path}');
+      });
       final controller = SessionController(api: api, credentialStore: store);
       await controller.restore();
       final epoch = controller.authorizationEpoch;
 
-      final purge = controller.revokeAfterPasswordReset();
+      final revocation = controller.signOut();
 
       expect(controller.phase, SessionPhase.signedOut);
       expect(controller.accessToken, isNull);
       expect(controller.authorization.isOperator, isFalse);
       expect(controller.authorizationEpoch, epoch + 1);
-      await purge;
+      await revocation;
       expect(store.session, isEmpty);
       expect(store.pending, isEmpty);
       expect(store.clears, 1);
+    },
+  );
+
+  test(
+    'sign out surfaces a failed keyring purge without masking revocation',
+    () async {
+      final store = MemoryCredentialStore()
+        ..installationId = installationId
+        ..session = storedSession();
+      final api = FakeApi((request) async {
+        if (request.path == '/api/v1/me') {
+          return jsonResponse(<String, Object?>{
+            'userId': storedSession()['userId'],
+            'platformRoles': <Object?>['platform_administrator'],
+          });
+        }
+        if (request.path == '/api/v1/auth/logout') {
+          return jsonResponse(const <String, Object?>{});
+        }
+        throw StateError('unexpected ${request.path}');
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      store.failClears = true;
+
+      await controller.signOut();
+
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(controller.accessToken, isNull);
+      expect(controller.authorization.isOperator, isFalse);
+      expect(controller.error, contains('keyring'));
     },
   );
 
@@ -229,6 +271,140 @@ void main() {
     expect(controller.phase, SessionPhase.signedOut);
     expect(store.session, isEmpty);
     expect(store.clears, 1);
+  });
+
+  test('durable session restores without any inactivity ceiling', () async {
+    final store = MemoryCredentialStore()
+      ..installationId = installationId
+      ..session = durableStoredSession();
+    final api = FakeApi((request) async {
+      if (request.path == '/api/v1/me') {
+        return jsonResponse(<String, Object?>{
+          'userId': storedSession()['userId'],
+          'platformRoles': <Object?>['platform_administrator'],
+        });
+      }
+      throw StateError('unexpected ${request.path}');
+    });
+    final controller = SessionController(api: api, credentialStore: store);
+
+    await controller.restore();
+
+    expect(controller.phase, SessionPhase.authenticated);
+    // A durable session never trips the local expiry ceiling; the fresh
+    // access token is reused without a refresh rotation.
+    expect(await controller.ensureFreshAccessToken(), isTrue);
+    expect(controller.phase, SessionPhase.authenticated);
+    expect(
+      api.requests.where((request) => request.path == '/api/v1/auth/refresh'),
+      isEmpty,
+    );
+  });
+
+  test(
+    'durable exchanged credentials round-trip null bounds through the store',
+    () async {
+      final store = MemoryCredentialStore()..installationId = installationId;
+      late String requestId;
+      late String expiresAt;
+      final api = FakeApi((request) async {
+        if (request.path == '/api/v1/auth/login-links') {
+          requestId =
+              (request.body! as Map<String, Object?>)['requestId']! as String;
+          expiresAt = DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 10))
+              .toIso8601String();
+          return jsonResponse(<String, Object?>{
+            'accepted': true,
+            'requestId': requestId,
+            'expiresAt': expiresAt,
+            'pollIntervalSeconds': 2,
+          });
+        }
+        if (request.path.endsWith('/status')) {
+          return jsonResponse(<String, Object?>{
+            'requestId': requestId,
+            'applicationKind': 'admin',
+            'status': 'approved',
+            'expiresAt': expiresAt,
+          });
+        }
+        if (request.path.endsWith('/exchange')) {
+          return jsonResponse(<String, Object?>{
+            ...rotatedSession(),
+            'refreshExpiresAt': null,
+            'idleExpiresAt': null,
+            'refreshIdleTtlSeconds': null,
+          });
+        }
+        if (request.path == '/api/v1/me') {
+          return jsonResponse(<String, Object?>{
+            'userId': storedSession()['userId'],
+            'platformRoles': <Object?>['catalog_reviewer'],
+          });
+        }
+        throw StateError('unexpected ${request.path}');
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      await controller.startLoginLink('operator@example.test');
+
+      expect(await controller.pollLoginLink(), isTrue);
+
+      expect(controller.phase, SessionPhase.authenticated);
+      for (final key in <String>[
+        'refreshExpiresAt',
+        'idleExpiresAt',
+        'refreshIdleTtlSeconds',
+      ]) {
+        expect(store.session[key], anyOf(isNull, isEmpty));
+      }
+
+      final restored = SessionController(api: api, credentialStore: store);
+      await restored.restore();
+
+      expect(restored.phase, SessionPhase.authenticated);
+      expect(await restored.ensureFreshAccessToken(), isTrue);
+    },
+  );
+
+  test('nonsense persisted idle bounds are still rejected', () async {
+    for (final refreshIdleTtlSeconds in <String>[
+      '899',
+      '5184001',
+      'not-a-number',
+    ]) {
+      final store = MemoryCredentialStore()
+        ..installationId = installationId
+        ..session = (storedSession()
+          ..['refreshIdleTtlSeconds'] = refreshIdleTtlSeconds);
+      final controller = SessionController(
+        api: FakeApi((_) async => throw StateError('must not call API')),
+        credentialStore: store,
+      );
+
+      await controller.restore();
+
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(store.session, isEmpty);
+    }
+  });
+
+  test('a partially bounded session tuple is purged as corrupt', () async {
+    final store = MemoryCredentialStore()
+      ..installationId = installationId
+      ..session = (durableStoredSession()
+        ..['refreshExpiresAt'] = '2026-10-01T00:00:00Z');
+    final controller = SessionController(
+      api: FakeApi((_) async => throw StateError('must not call API')),
+      credentialStore: store,
+    );
+
+    await controller.restore();
+
+    expect(controller.phase, SessionPhase.signedOut);
+    expect(store.session, isEmpty);
   });
 
   test('sign out purges memory after a non-API transport failure', () async {

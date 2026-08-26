@@ -5,12 +5,9 @@ import 'package:http/http.dart' as http;
 
 import 'app/providentia_admin_app.dart';
 import 'core/api/api_client.dart';
-import 'core/auth/admin_account_link.dart';
 import 'core/auth/credential_store.dart';
 import 'core/auth/session_controller.dart';
 import 'core/platform/application_link_source.dart';
-import 'features/auth/admin_account_action_controller.dart';
-import 'features/auth/admin_account_action_port.dart';
 import 'features/auth/admin_approval_controller.dart';
 import 'features/auth/admin_approval_port.dart';
 
@@ -34,20 +31,10 @@ Future<void> main(List<String> arguments) async {
   );
   session = SessionController(api: api, credentialStore: credentialStore);
   final approval = AdminApprovalController(HttpAdminLoginApprovalPort(api));
-  final accountActions = AdminAccountActionController(
-    HttpAdminAccountActionPort(api),
-    passwordResetSessionBoundary: CallbackAdminPasswordResetSessionBoundary(
-      session.revokeAfterPasswordReset,
-    ),
-  );
   final linkSource = LinuxApplicationLinkSource();
   await linkSource.start();
   void handleApplicationLink(Uri uri) {
-    if (looksLikeAdminAccountLink(uri)) {
-      unawaited(accountActions.begin(uri));
-    } else {
-      unawaited(approval.begin(uri));
-    }
+    unawaited(approval.begin(uri));
   }
 
   linkSource.links.listen(handleApplicationLink);
@@ -56,13 +43,6 @@ Future<void> main(List<String> arguments) async {
     if (uri != null) handleApplicationLink(uri);
   }
 
-  runApp(
-    ProvidentiaAdminApp(
-      api: api,
-      approval: approval,
-      accountActions: accountActions,
-      session: session,
-    ),
-  );
+  runApp(ProvidentiaAdminApp(api: api, approval: approval, session: session));
   unawaited(session.restore());
 }

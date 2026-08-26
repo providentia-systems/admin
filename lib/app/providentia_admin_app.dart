@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../core/api/api_client.dart';
 import '../core/auth/session_controller.dart';
-import '../features/auth/admin_account_action_controller.dart';
-import '../features/auth/admin_account_action_page.dart';
 import '../features/auth/admin_approval_controller.dart';
 import '../features/auth/admin_approval_page.dart';
 import '../features/auth/login_page.dart';
@@ -14,14 +12,12 @@ final class ProvidentiaAdminApp extends StatelessWidget {
   const ProvidentiaAdminApp({
     required this.api,
     required this.approval,
-    required this.accountActions,
     required this.session,
     super.key,
   });
 
   final ApiClient api;
   final AdminApprovalController approval;
-  final AdminAccountActionController accountActions;
   final SessionController session;
 
   @override
@@ -30,21 +26,13 @@ final class ProvidentiaAdminApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     theme: buildAdminTheme(),
     home: AnimatedBuilder(
-      animation: Listenable.merge(<Listenable>[
-        session,
-        approval,
-        accountActions,
-      ]),
-      builder: (context, _) => accountActions.isVisible
-          ? AdminAccountActionPage(controller: accountActions)
-          : approval.isVisible
+      animation: Listenable.merge(<Listenable>[session, approval]),
+      builder: (context, _) => approval.isVisible
           ? AdminApprovalPage(controller: approval)
           : switch (session.phase) {
               SessionPhase.restoring => const _RestoringPage(),
-              SessionPhase.signedOut || SessionPhase.loginPending => LoginPage(
-                session: session,
-                accountActions: accountActions,
-              ),
+              SessionPhase.signedOut ||
+              SessionPhase.loginPending => LoginPage(session: session),
               SessionPhase.authenticated => AdminShell(
                 key: ValueKey<int>(session.authorizationEpoch),
                 api: api,

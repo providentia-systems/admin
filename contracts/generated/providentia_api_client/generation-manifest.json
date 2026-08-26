@@ -3,13 +3,12 @@
   "generatorVersion": 1,
   "repositoryRole": "linux-admin-client",
   "contract": "../../providentia-v1.json",
-  "contractVersion": "1.18.0",
-  "contractSha256": "fb7f18cc8d2e0f7aaf3ec9f1bd3039316c6f44af0023110936778a8d616a6759",
-  "operationCount": 47,
+  "contractVersion": "1.19.0",
+  "contractSha256": "7e13d550e7a4438297766f654fadbd1e75894efac989229da6fcd0d9f7f97dda",
+  "operationCount": 43,
   "allowedOperationIds": [
     "applyCatalogMerge",
     "cancelLoginLink",
-    "completePasswordReset",
     "createBillingPlan",
     "createBillingPrice",
     "createBillingPromotion",
@@ -41,8 +40,6 @@
     "putCatalogIcon",
     "putCatalogProductImageContributionPublication",
     "refreshSession",
-    "requestPasswordReset",
-    "resendEmailVerification",
     "reverseCatalogMerge",
     "reviewLoginLinkApproval",
     "revokeHomeBillingOverride",
@@ -52,8 +49,7 @@
     "setBillingPriceStatus",
     "startLoginLink",
     "updateBillingPlan",
-    "updateOperatorAccountStatus",
-    "verifyEmail"
+    "updateOperatorAccountStatus"
   ],
   "generatedFiles": [
     "pubspec.yaml",
