@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARCHIVE="${ROOT}/contracts/source/providentia-v1.json.gz"
 OUTPUT="${ROOT}/contracts/providentia-v1.json"
-ARCHIVE_SHA256="b17569f05e8384416498254e882c7e790399a4cde8677439a3efa52c74181d25"
-OUTPUT_SHA256="fb7f18cc8d2e0f7aaf3ec9f1bd3039316c6f44af0023110936778a8d616a6759"
+ARCHIVE_SHA256="efd446df4878c1e58c381e2b1a8dead3be55380d389be70e3ff789eead1ec4c0"
+OUTPUT_SHA256="7e13d550e7a4438297766f654fadbd1e75894efac989229da6fcd0d9f7f97dda"
 
 sha256_file() {
   sha256sum "$1" | cut -d' ' -f1
@@ -31,4 +31,4 @@ fi
 
 mv "${TEMP_OUTPUT}" "${OUTPUT}"
 trap - EXIT
-echo "Materialized Providentia API 1.18.0 contract."
+echo "Materialized Providentia API 1.19.0 contract."

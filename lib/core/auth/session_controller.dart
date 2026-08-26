@@ -319,33 +319,23 @@ final class SessionController extends ChangeNotifier {
     unawaited(_clearStoredCredentialMaterial());
   }
 
-  /// Synchronously removes every privileged in-memory capability after a
-  /// successful password reset, then waits for both native keyring tuples to
-  /// be deleted before the account-action UI may report completion.
-  Future<void> revokeAfterPasswordReset() async {
-    _clearMemory('Password reset completed. Sign in again.');
-    notifyListeners();
-    if (!await _clearStoredCredentialMaterial()) {
-      throw StateError('Administrator credential cleanup did not complete.');
-    }
-  }
-
   Future<bool> ensureFreshAccessToken({bool force = false}) {
     final accessToken = _accessToken;
     final refreshToken = _refreshToken;
     final accessExpiresAt = _accessExpiresAt;
-    final refreshExpiresAt = _refreshExpiresAt;
-    final idleExpiresAt = _idleExpiresAt;
     if (accessToken == null ||
         refreshToken == null ||
-        accessExpiresAt == null ||
-        refreshExpiresAt == null ||
-        idleExpiresAt == null) {
+        accessExpiresAt == null) {
       return Future<bool>.value(false);
     }
 
+    // A durable trusted-device session has null expiry bounds and lives until
+    // explicit sign-out, revocation, or an account-level invalidation.
     final now = DateTime.now().toUtc();
-    if (!refreshExpiresAt.isAfter(now) || !idleExpiresAt.isAfter(now)) {
+    final refreshExpiresAt = _refreshExpiresAt;
+    final idleExpiresAt = _idleExpiresAt;
+    if ((refreshExpiresAt != null && !refreshExpiresAt.isAfter(now)) ||
+        (idleExpiresAt != null && !idleExpiresAt.isAfter(now))) {
       authorizationLost();
       return Future<bool>.value(false);
     }
@@ -574,8 +564,14 @@ final class SessionController extends ChangeNotifier {
     _deviceId = values['deviceId'];
     _userId = values['userId'];
     _accessExpiresAt = DateTime.parse(values['accessExpiresAt']!).toUtc();
-    _refreshExpiresAt = DateTime.parse(values['refreshExpiresAt']!).toUtc();
-    _idleExpiresAt = DateTime.parse(values['idleExpiresAt']!).toUtc();
+    final refreshExpiresAt = _durableBound(values, 'refreshExpiresAt');
+    final idleExpiresAt = _durableBound(values, 'idleExpiresAt');
+    _refreshExpiresAt = refreshExpiresAt == null
+        ? null
+        : DateTime.parse(refreshExpiresAt).toUtc();
+    _idleExpiresAt = idleExpiresAt == null
+        ? null
+        : DateTime.parse(idleExpiresAt).toUtc();
   }
 
   void _validateSession(
@@ -608,16 +604,34 @@ final class SessionController extends ChangeNotifier {
       throw const FormatException('Rotated session binding mismatch.');
     }
     final access = DateTime.parse(values['accessExpiresAt']!).toUtc();
-    final refresh = DateTime.parse(values['refreshExpiresAt']!).toUtc();
-    final idle = DateTime.parse(values['idleExpiresAt']!).toUtc();
+    // Durable trusted-device sessions null every inactivity bound together;
+    // a bounded session carries all three. Any mixed shape is corrupt.
+    final refreshExpiresAt = _durableBound(values, 'refreshExpiresAt');
+    final idleExpiresAt = _durableBound(values, 'idleExpiresAt');
+    final refreshIdleTtlSeconds = _durableBound(
+      values,
+      'refreshIdleTtlSeconds',
+    );
+    final bounds = <String?>[
+      refreshExpiresAt,
+      idleExpiresAt,
+      refreshIdleTtlSeconds,
+    ];
+    final boundedCount = bounds.whereType<String>().length;
+    if (boundedCount != 0 && boundedCount != bounds.length) {
+      throw const FormatException('Session idle bounds were incoherent.');
+    }
+    if (boundedCount == 0) return;
+    final refresh = DateTime.parse(refreshExpiresAt!).toUtc();
+    final idle = DateTime.parse(idleExpiresAt!).toUtc();
     final now = DateTime.now().toUtc();
     if (!refresh.isAfter(now) ||
         !idle.isAfter(now) ||
         access.isAfter(refresh)) {
       throw const FormatException('Session expiry bounds were invalid.');
     }
-    final idleTtl = int.parse(values['refreshIdleTtlSeconds']!);
-    if (idleTtl < 900 || idleTtl > 5184000) {
+    final idleTtl = int.tryParse(refreshIdleTtlSeconds!);
+    if (idleTtl == null || idleTtl < 900 || idleTtl > 5184000) {
       throw const FormatException('Session idle bound was invalid.');
     }
   }
@@ -642,6 +656,9 @@ final class SessionController extends ChangeNotifier {
   );
 
   static bool _hasAtomicSession(Map<String, String> values) {
+    // refreshExpiresAt, idleExpiresAt and refreshIdleTtlSeconds are absent (or
+    // empty) for a durable trusted-device session; _validateSession rejects
+    // any partially bounded tuple.
     const required = <String>{
       'accessToken',
       'refreshToken',
@@ -650,12 +667,16 @@ final class SessionController extends ChangeNotifier {
       'installationId',
       'userId',
       'accessExpiresAt',
-      'refreshExpiresAt',
-      'idleExpiresAt',
-      'refreshIdleTtlSeconds',
       'transport',
     };
     return required.every((key) => values[key]?.isNotEmpty ?? false);
+  }
+
+  /// Normalizes a nullable session bound: the wire maps `null` to an empty
+  /// string and the credential store omits the key entirely.
+  static String? _durableBound(Map<String, String> values, String key) {
+    final value = values[key];
+    return (value == null || value.isEmpty) ? null : value;
   }
 
   static bool _isBase64UrlSecret(
