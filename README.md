@@ -1,5 +1,8 @@
 # Providentia Admin
 
+> **Proprietary software.** Copyright (c) 2026 Vast Development Method Trading
+> Pty Ltd. All rights reserved. No licence is granted; see [LICENSE](LICENSE).
+
 Providentia Admin is the separate Flutter administration client for the
 Providentia home-stock platform. Its first supported target is Linux desktop;
 there are deliberately no Android, iOS, macOS, web or Windows runners in this
@@ -71,6 +74,12 @@ Linux signing credentials are present.
 - Admin rejects homeowner application links, non-Admin session bindings and
   every household API route before privileged state can be displayed.
 
-This repository contains proprietary Providentia product source. The owner has
-authorized development through public branches and draft pull requests; this
-does not grant redistribution or relicensing rights.
+## License
+
+Copyright (c) 2026 Vast Development Method Trading Pty Ltd. All rights reserved.
+
+This repository is proprietary software. No licence is granted to use, copy,
+modify, merge, publish, distribute, sublicense, or sell the software except as
+expressly authorised in writing by Vast Development Method Trading Pty Ltd.
+Viewing or forking this repository on GitHub does not grant a licence. See the
+[LICENSE](LICENSE) file for the complete terms.
