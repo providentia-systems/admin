@@ -1,20 +1,3 @@
-enum PlatformRole {
-  administrator('platform_administrator'),
-  catalogCurator('catalog_curator'),
-  catalogReviewer('catalog_reviewer'),
-  billingOperator('billing_operator');
-
-  const PlatformRole(this.wireName);
-  final String wireName;
-
-  static PlatformRole? parse(String value) {
-    for (final role in values) {
-      if (role.wireName == value) return role;
-    }
-    return null;
-  }
-}
-
 enum OperatorCapability {
   manageAccounts,
   manageAdministrators,
@@ -25,48 +8,37 @@ enum OperatorCapability {
 }
 
 final class OperatorAuthorization {
-  const OperatorAuthorization._(this.roles, this.capabilities);
+  const OperatorAuthorization._(this.permissions, this.capabilities);
 
-  factory OperatorAuthorization.fromWire(Iterable<Object?> wireRoles) {
-    final roles = wireRoles
-        .whereType<String>()
-        .map(PlatformRole.parse)
-        .whereType<PlatformRole>()
-        .toSet();
-    final capabilities = <OperatorCapability>{};
-    if (roles.contains(PlatformRole.administrator)) {
-      capabilities.addAll(OperatorCapability.values);
-    }
-    if (roles.contains(PlatformRole.catalogReviewer)) {
-      capabilities.add(OperatorCapability.reviewCatalog);
-    }
-    if (roles.contains(PlatformRole.catalogCurator)) {
-      capabilities.addAll(const <OperatorCapability>{
-        OperatorCapability.reviewCatalog,
-        OperatorCapability.curateCatalog,
-      });
-    }
-    if (roles.contains(PlatformRole.billingOperator)) {
-      capabilities.addAll(const <OperatorCapability>{
-        OperatorCapability.viewBilling,
-        OperatorCapability.manageBilling,
-      });
-    }
+  factory OperatorAuthorization.fromPermissions(Iterable<String> values) {
+    const known = <String>{'accounts.read', 'accounts.manage', 'accounts.assign', 'people.read', 'homes.read', 'homes.assign', 'homes.manage', 'administrators.read', 'administrators.approve', 'administrators.manage', 'groups.manage', 'countries.manage', 'policies.manage', 'catalog.read', 'catalog.review', 'catalog.curate', 'billing.read', 'billing.manage', 'audit.read'};
+    final permissions = values.where(known.contains).toSet();
+    final mapping = <OperatorCapability, String>{
+      OperatorCapability.manageAccounts: 'accounts.read',
+      OperatorCapability.manageAdministrators: 'administrators.read',
+      OperatorCapability.reviewCatalog: 'catalog.review',
+      OperatorCapability.curateCatalog: 'catalog.curate',
+      OperatorCapability.viewBilling: 'billing.read',
+      OperatorCapability.manageBilling: 'billing.manage',
+    };
     return OperatorAuthorization._(
-      Set<PlatformRole>.unmodifiable(roles),
-      Set<OperatorCapability>.unmodifiable(capabilities),
+      Set<String>.unmodifiable(permissions),
+      Set<OperatorCapability>.unmodifiable(
+        mapping.entries
+            .where((entry) => permissions.contains(entry.value))
+            .map((entry) => entry.key),
+      ),
     );
   }
 
   static const none = OperatorAuthorization._(
-    <PlatformRole>{},
+    <String>{},
     <OperatorCapability>{},
   );
-
-  final Set<PlatformRole> roles;
+  final Set<String> permissions;
   final Set<OperatorCapability> capabilities;
-
   bool allows(OperatorCapability capability) =>
       capabilities.contains(capability);
-  bool get isOperator => capabilities.isNotEmpty;
+  bool has(String permission) => permissions.contains(permission);
+  bool get isOperator => permissions.isNotEmpty;
 }
