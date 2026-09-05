@@ -55,6 +55,14 @@ final class SessionController extends ChangeNotifier {
   int _sessionEpoch = 0;
   int _loginEpoch = 0;
   Future<bool>? _refreshInFlight;
+  Future<void> _storageTail = Future<void>.value();
+
+  Future<T> _mutateStorage<T>(Future<T> Function() action) {
+    final result = _storageTail.then((_) => action());
+    _storageTail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return result;
+  }
+
 
   SessionPhase get phase => _phase;
   OperatorAuthorization get authorization => _authorization;
@@ -128,7 +136,9 @@ final class SessionController extends ChangeNotifier {
         )) {
       throw const FormatException('Invalid email verification response.');
     }
-    await _credentialStore.writePendingLogin(<String, String>{
+    await _mutateStorage(() async {
+      if (loginEpoch != _loginEpoch) return;
+      await _credentialStore.writePendingLogin(<String, String>{
       'challengeId': challenge.challengeId,
       'bindingToken': challenge.bindingToken,
       'email': challenge.email,
@@ -139,6 +149,8 @@ final class SessionController extends ChangeNotifier {
       await _credentialStore.clearPendingLogin();
       return;
     }
+    });
+    if (loginEpoch != _loginEpoch) return;
     _challenge = challenge;
     _phase = SessionPhase.loginPending;
     notifyListeners();
@@ -177,7 +189,7 @@ final class SessionController extends ChangeNotifier {
       await _bootstrapAuthorization(expectedSessionEpoch: _sessionEpoch);
       return _phase == SessionPhase.authenticated;
     } on Object {
-      await _purgeSession(
+      if (loginEpoch == _loginEpoch) await _purgeSession(
         'The administrator session could not be established. Request a new code.',
       );
       rethrow;
@@ -186,11 +198,9 @@ final class SessionController extends ChangeNotifier {
 
   Future<void> cancelEmailCode() async {
     ++_loginEpoch;
-    _challenge = null;
-    _phase = SessionPhase.signedOut;
-    _error = null;
-    notifyListeners();
-    await _credentialStore.clearPendingLogin();
+    // signOut clears memory synchronously, including a grant awaiting bootstrap.
+    final cleanup = signOut();
+    unawaited(cleanup);
   }
 
   Future<void> signOut() async {
@@ -198,6 +208,7 @@ final class SessionController extends ChangeNotifier {
     // Revoke local authorization before the first await. A late refresh or a
     // slow logout transport must never keep privileged widgets alive.
     _clearMemory(null);
+    final logoutEpoch = _loginEpoch;
     notifyListeners();
     try {
       await _api.postPublic(
@@ -209,7 +220,7 @@ final class SessionController extends ChangeNotifier {
     } on Object {
       // Local credential destruction does not depend on network success.
     } finally {
-      await _clearStoredCredentialMaterial();
+      if (logoutEpoch == _loginEpoch) await _clearStoredCredentialMaterial();
     }
   }
 
@@ -283,11 +294,16 @@ final class SessionController extends ChangeNotifier {
         expectedDeviceId: expectedDeviceId,
         expectedUserId: expectedUserId,
       );
-      await _credentialStore.writeSession(values);
-      if (epoch != _sessionEpoch) {
-        await _credentialStore.clearSession();
-        return false;
-      }
+      final stored = await _mutateStorage(() async {
+        if (epoch != _sessionEpoch) return false;
+        await _credentialStore.writeSession(values);
+        if (epoch != _sessionEpoch) {
+          await _credentialStore.clearSession();
+          return false;
+        }
+        return true;
+      });
+      if (!stored) return false;
       _activateSession(values);
       return true;
     } on Object {
@@ -368,7 +384,15 @@ final class SessionController extends ChangeNotifier {
     _error = message;
   }
 
-  Future<bool> _clearStoredCredentialMaterial() async {
+  Future<bool> _clearStoredCredentialMaterial() {
+    final epoch = _loginEpoch;
+    return _mutateStorage(() async {
+      if (epoch != _loginEpoch) return true;
+      return _clearStoredCredentialMaterialInsideWrite();
+    });
+  }
+
+  Future<bool> _clearStoredCredentialMaterialInsideWrite() async {
     var cleared = true;
     try {
       await _credentialStore.clearSession();
@@ -423,7 +447,14 @@ final class SessionController extends ChangeNotifier {
     Map<String, Object?> credentials, {
     required int expectedLoginEpoch,
     required EmailCodeChallenge expectedChallenge,
+  }) => _mutateStorage(() => _establishSessionInsideWrite(credentials, expectedLoginEpoch: expectedLoginEpoch, expectedChallenge: expectedChallenge));
+
+  Future<bool> _establishSessionInsideWrite(
+    Map<String, Object?> credentials, {
+    required int expectedLoginEpoch,
+    required EmailCodeChallenge expectedChallenge,
   }) async {
+    if (expectedLoginEpoch != _loginEpoch || !identical(expectedChallenge, _challenge)) return false;
     final values = _credentialValues(credentials);
     _validateSession(values);
     await _credentialStore.writeSession(values);

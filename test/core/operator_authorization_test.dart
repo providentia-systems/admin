@@ -1,75 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:providentia_admin/core/auth/operator_authorization.dart';
-
-void main() {
-  group('OperatorAuthorization', () {
-    test('maps every backend role to only its bounded capabilities', () {
-      final authorization = OperatorAuthorization.fromWire(const <Object?>[
-        'platform_administrator',
-        'catalog_reviewer',
-        'catalog_curator',
-        'billing_operator',
-      ]);
-
-      expect(authorization.roles, hasLength(4));
-      expect(
-        authorization.capabilities,
-        containsAll(OperatorCapability.values),
-      );
-    });
-
-    test('ignores unknown roles rather than broadening access', () {
-      final authorization = OperatorAuthorization.fromWire(const <Object?>[
-        'home_owner',
-        'future_unknown_role',
-      ]);
-
-      expect(authorization.isOperator, isFalse);
-      expect(authorization.roles, isEmpty);
-      expect(authorization.capabilities, isEmpty);
-    });
-
-    test('catalog reviewer cannot curate or manage accounts', () {
-      final authorization = OperatorAuthorization.fromWire(const <Object?>[
-        'catalog_reviewer',
-      ]);
-
-      expect(authorization.capabilities, <OperatorCapability>{
-        OperatorCapability.reviewCatalog,
-      });
-    });
-
-    test('administrator mirrors backend super-operator capabilities', () {
-      final authorization = OperatorAuthorization.fromWire(const <Object?>[
-        'platform_administrator',
-      ]);
-
-      expect(
-        authorization.capabilities,
-        containsAll(OperatorCapability.values),
-      );
-    });
-
-    test('curator may review and curate but not manage accounts', () {
-      final authorization = OperatorAuthorization.fromWire(const <Object?>[
-        'catalog_curator',
-      ]);
-
-      expect(authorization.capabilities, <OperatorCapability>{
-        OperatorCapability.reviewCatalog,
-        OperatorCapability.curateCatalog,
-      });
-    });
-
-    test('billing operator is isolated from accounts and catalog routes', () {
-      final authorization = OperatorAuthorization.fromWire(const <Object?>[
-        'billing_operator',
-      ]);
-
-      expect(authorization.capabilities, <OperatorCapability>{
-        OperatorCapability.viewBilling,
-        OperatorCapability.manageBilling,
-      });
-    });
-  });
+void main(){
+ test('unknown flags cannot grant operator access',(){expect(OperatorAuthorization.fromPermissions(['home_owner','future.flag']).isOperator,isFalse);});
+ test('catalog review does not grant curation or account access',(){final a=OperatorAuthorization.fromPermissions(['catalog.review']);expect(a.capabilities,{OperatorCapability.reviewCatalog});});
+ test('administrator listing does not grant approval',(){final a=OperatorAuthorization.fromPermissions(['administrators.read']);expect(a.has('administrators.approve'),isFalse);expect(a.allows(OperatorCapability.manageAdministrators),isTrue);});
+ test('billing access remains separate from people access',(){final a=OperatorAuthorization.fromPermissions(['billing.read','billing.manage']);expect(a.has('people.read'),isFalse);expect(a.capabilities,{OperatorCapability.viewBilling,OperatorCapability.manageBilling});});
 }

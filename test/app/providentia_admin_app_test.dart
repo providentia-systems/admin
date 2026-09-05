@@ -5,8 +5,6 @@ import 'package:http/testing.dart';
 import 'package:providentia_admin/app/providentia_admin_app.dart';
 import 'package:providentia_admin/core/api/api_client.dart';
 import 'package:providentia_admin/core/auth/session_controller.dart';
-import 'package:providentia_admin/features/auth/admin_approval_controller.dart';
-import 'package:providentia_admin/features/auth/admin_approval_port.dart';
 
 import '../support/fake_api.dart';
 import '../support/memory_credential_store.dart';
@@ -36,7 +34,7 @@ void main() {
       if (request.path == '/api/v1/me') {
         return jsonResponse(<String, Object?>{
           'userId': memoryStoredSession()['userId'],
-          'platformRoles': <Object?>['platform_administrator'],
+          'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
         });
       }
       throw StateError('unexpected ${request.path}');
@@ -46,22 +44,19 @@ void main() {
     expect(session.phase, SessionPhase.authenticated);
 
     final appApi = _appApi(session);
-    final approval = AdminApprovalController(
-      HttpAdminLoginApprovalPort(appApi),
-    );
     addTearDown(() {
-      approval.dispose();
       appApi.close();
     });
 
     await tester.pumpWidget(
-      ProvidentiaAdminApp(api: appApi, approval: approval, session: session),
+      ProvidentiaAdminApp(api: appApi, session: session),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('Providentia administration'), findsOneWidget);
-    expect(find.text('Platform administrators'), findsOneWidget);
+    expect(find.text('Administrators'), findsOneWidget);
 
+    await tester.scrollUntilVisible(find.text('Billing'), 180, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Billing'));
     await tester.pumpAndSettle();
     expect(find.text('Free stabilization phase'), findsOneWidget);
@@ -71,7 +66,7 @@ void main() {
 
     expect(find.text('Providentia administration'), findsNothing);
     expect(
-      find.text('Sign in with an account that has a platform operator role.'),
+      find.text('Enter your email to sign in or request administrator access.'),
       findsOneWidget,
     );
 
@@ -91,16 +86,12 @@ void main() {
       ),
     );
     final appApi = _appApi(session);
-    final approval = AdminApprovalController(
-      HttpAdminLoginApprovalPort(appApi),
-    );
     addTearDown(() {
-      approval.dispose();
       appApi.close();
     });
 
     await tester.pumpWidget(
-      ProvidentiaAdminApp(api: appApi, approval: approval, session: session),
+      ProvidentiaAdminApp(api: appApi, session: session),
     );
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
