@@ -7,9 +7,6 @@ import 'app/providentia_admin_app.dart';
 import 'core/api/api_client.dart';
 import 'core/auth/credential_store.dart';
 import 'core/auth/session_controller.dart';
-import 'core/platform/application_link_source.dart';
-import 'features/auth/admin_approval_controller.dart';
-import 'features/auth/admin_approval_port.dart';
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,19 +27,6 @@ Future<void> main(List<String> arguments) async {
     onAuthorizationLost: () => session.authorizationLost(),
   );
   session = SessionController(api: api, credentialStore: credentialStore);
-  final approval = AdminApprovalController(HttpAdminLoginApprovalPort(api));
-  final linkSource = LinuxApplicationLinkSource();
-  await linkSource.start();
-  void handleApplicationLink(Uri uri) {
-    unawaited(approval.begin(uri));
-  }
-
-  linkSource.links.listen(handleApplicationLink);
-  for (final argument in arguments.take(1)) {
-    final uri = Uri.tryParse(argument);
-    if (uri != null) handleApplicationLink(uri);
-  }
-
-  runApp(ProvidentiaAdminApp(api: api, approval: approval, session: session));
+  runApp(ProvidentiaAdminApp(api: api, session: session));
   unawaited(session.restore());
 }

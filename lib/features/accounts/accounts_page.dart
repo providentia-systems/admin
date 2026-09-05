@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/session_controller.dart';
+import '../access/access_groups_page.dart';
 import 'account_models.dart';
 import 'account_repository.dart';
 
@@ -51,7 +52,7 @@ class _AccountsPageState extends State<AccountsPage> {
         Text('Accounts', style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 8),
         const Text(
-          'Privacy-safe identity, home membership summary, status, sessions and platform roles.',
+          'Account identity, home memberships, account allowances and lifecycle status.',
         ),
         const SizedBox(height: 20),
         Row(
@@ -165,8 +166,23 @@ class _AccountsPageState extends State<AccountsPage> {
                         )
                       : _AccountDetail(
                           account: _selected!,
-                          onStatus: _changeStatus,
-                          onRole: _changeRole,
+                          onStatus:
+                              widget.session.authorization.has(
+                                'accounts.manage',
+                              )
+                              ? _changeStatus
+                              : null,
+                          onAssignGroup:
+                              widget.session.authorization.has(
+                                'accounts.assign',
+                              )
+                              ? () => showGroupAssignment(
+                                  context,
+                                  widget.api,
+                                  'account',
+                                  _selected!.userId,
+                                )
+                              : null,
                         ),
                 ),
               ),
@@ -240,30 +256,6 @@ class _AccountsPageState extends State<AccountsPage> {
       if (selected.userId == widget.session.userId && status != 'active') {
         widget.session.authorizationLost();
         return;
-      }
-      setState(() => _selected = updated);
-      await _load();
-    } on ApiException catch (error) {
-      if (error.isConflict) await _select(selected);
-      if (mounted) _snack(_safeApiMessage(error));
-    }
-  }
-
-  Future<void> _changeRole(String role, bool grant) async {
-    final selected = _selected;
-    if (selected == null) return;
-    final epoch = widget.session.authorizationEpoch;
-    try {
-      final updated = await _repository.changeRole(
-        userId: selected.userId,
-        role: role,
-        expectedRevision: selected.revision,
-        grant: grant,
-      );
-      if (!_isAuthorized(epoch)) return;
-      if (selected.userId == widget.session.userId) {
-        await widget.session.refreshAuthorization();
-        if (!_isAuthorized(epoch)) return;
       }
       setState(() => _selected = updated);
       await _load();
@@ -361,12 +353,12 @@ final class _AccountDetail extends StatelessWidget {
   const _AccountDetail({
     required this.account,
     required this.onStatus,
-    required this.onRole,
+    required this.onAssignGroup,
   });
 
   final OperatorAccount account;
-  final ValueChanged<String> onStatus;
-  final void Function(String role, bool grant) onRole;
+  final ValueChanged<String>? onStatus;
+  final VoidCallback? onAssignGroup;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -390,21 +382,11 @@ final class _AccountDetail extends StatelessWidget {
         ],
       ),
       const Divider(height: 32),
-      Text('Platform roles', style: Theme.of(context).textTheme.titleMedium),
-      for (final role in const <String>[
-        'platform_administrator',
-        'catalog_reviewer',
-        'catalog_curator',
-        'billing_operator',
-      ])
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          value: account.platformRoles.contains(role),
-          title: Text(role.replaceAll('_', ' ')),
-          onChanged: account.isClosed
-              ? null
-              : (value) => onRole(role, value ?? false),
-        ),
+      OutlinedButton.icon(
+        onPressed: onAssignGroup,
+        icon: const Icon(Icons.group_outlined),
+        label: const Text('Change account group'),
+      ),
       const Divider(height: 32),
       Text('Lifecycle', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 8),
@@ -413,19 +395,24 @@ final class _AccountDetail extends StatelessWidget {
         runSpacing: 8,
         children: <Widget>[
           OutlinedButton(
-            onPressed: account.status == 'active'
+            onPressed: onStatus == null || account.status == 'active'
                 ? null
-                : () => onStatus('active'),
+                : () => onStatus!('active'),
             child: const Text('Activate'),
           ),
           OutlinedButton(
-            onPressed: account.status == 'suspended' || account.isClosed
+            onPressed:
+                onStatus == null ||
+                    account.status == 'suspended' ||
+                    account.isClosed
                 ? null
-                : () => onStatus('suspended'),
+                : () => onStatus!('suspended'),
             child: const Text('Suspend'),
           ),
           FilledButton.tonal(
-            onPressed: account.isClosed ? null : () => onStatus('closed'),
+            onPressed: onStatus == null || account.isClosed
+                ? null
+                : () => onStatus!('closed'),
             child: const Text('Close permanently'),
           ),
         ],
