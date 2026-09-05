@@ -45,18 +45,4 @@ final class AccountRepository {
     );
     return OperatorAccount.fromJson(response.jsonObject);
   }
-
-  Future<OperatorAccount> changeRole({
-    required String userId,
-    required String role,
-    required int expectedRevision,
-    required bool grant,
-  }) async {
-    final path = '/api/v1/admin/accounts/$userId/roles/$role';
-    final body = <String, Object?>{'expectedRevision': expectedRevision};
-    final response = grant
-        ? await _api.put(path, body: body)
-        : await _api.delete(path, body: body);
-    return OperatorAccount.fromJson(response.jsonObject);
-  }
 }

@@ -3,10 +3,15 @@ import 'package:flutter/material.dart';
 import '../core/api/api_client.dart';
 import '../core/auth/operator_authorization.dart';
 import '../core/auth/session_controller.dart';
+import '../features/access/access_groups_page.dart';
 import '../features/accounts/accounts_page.dart';
 import '../features/administrators/platform_administrators_page.dart';
 import '../features/billing/billing_page.dart';
 import '../features/catalog/catalog_page.dart';
+import '../features/geography/country_administration_page.dart';
+import '../features/profile/account_profile_page.dart';
+import '../features/profile/admin_profile_port.dart';
+import '../features/workspace/operator_records_page.dart';
 
 final class AdminShell extends StatefulWidget {
   const AdminShell({required this.api, required this.session, super.key});
@@ -37,11 +42,66 @@ class _AdminShellState extends State<AdminShell> {
   Widget build(BuildContext context) {
     final authorization = widget.session.authorization;
     final destinations = <_Destination>[
+      _Destination(
+        label: 'Your profile',
+        icon: Icons.person_outline,
+        page: AccountProfilePage(
+          port: AdminProfilePort(widget.api),
+          onChanged: widget.session.reloadProfile,
+        ),
+      ),
+      if (authorization.has('groups.manage'))
+        _Destination(
+          label: 'Groups',
+          icon: Icons.group_work_outlined,
+          page: AccessGroupsPage(api: widget.api),
+        ),
+      if (authorization.has('homes.read'))
+        _Destination(
+          label: 'Homes',
+          icon: Icons.home_outlined,
+          page: OperatorRecordsPage(
+            api: widget.api,
+            authorization: authorization,
+          ),
+        ),
+      if (authorization.has('countries.manage'))
+        _Destination(
+          label: 'Countries',
+          icon: Icons.public,
+          page: CountryAdministrationPage(
+            api: widget.api,
+            authorization: authorization,
+          ),
+        ),
+      if (authorization.has('policies.manage'))
+        _Destination(
+          label: 'Privacy policies',
+          icon: Icons.policy_outlined,
+          page: CountryAdministrationPage(
+            api: widget.api,
+            authorization: authorization,
+            policies: true,
+          ),
+        ),
+      if (authorization.has('audit.read'))
+        _Destination(
+          label: 'Audit history',
+          icon: Icons.history,
+          page: OperatorRecordsPage(
+            api: widget.api,
+            authorization: authorization,
+            audit: true,
+          ),
+        ),
       if (authorization.allows(OperatorCapability.manageAdministrators))
         _Destination(
           label: 'Administrators',
           icon: Icons.admin_panel_settings_outlined,
-          page: PlatformAdministratorsPage(api: widget.api),
+          page: PlatformAdministratorsPage(
+            api: widget.api,
+            session: widget.session,
+          ),
         ),
       if (authorization.allows(OperatorCapability.manageAccounts))
         _Destination(
@@ -78,7 +138,7 @@ class _AdminShellState extends State<AdminShell> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Center(
               child: Text(
-                '${authorization.roles.length} operator role(s)',
+                '${authorization.permissions.length} permissions',
                 style: Theme.of(context).textTheme.labelLarge,
               ),
             ),
@@ -95,19 +155,19 @@ class _AdminShellState extends State<AdminShell> {
           ? const Center(child: Text('No operator capability is available.'))
           : Row(
               children: <Widget>[
-                NavigationRail(
-                  selectedIndex: _selected,
-                  labelType: NavigationRailLabelType.all,
-                  onDestinationSelected: (value) =>
-                      setState(() => _selected = value),
-                  destinations: destinations
-                      .map(
-                        (destination) => NavigationRailDestination(
-                          icon: Icon(destination.icon),
-                          label: Text(destination.label),
+                SizedBox(
+                  width: 220,
+                  child: ListView(
+                    children: <Widget>[
+                      for (var index = 0; index < destinations.length; index++)
+                        ListTile(
+                          leading: Icon(destinations[index].icon),
+                          title: Text(destinations[index].label),
+                          selected: _selected == index,
+                          onTap: () => setState(() => _selected = index),
                         ),
-                      )
-                      .toList(growable: false),
+                    ],
+                  ),
                 ),
                 const VerticalDivider(width: 1),
                 Expanded(child: destinations[_selected].page),

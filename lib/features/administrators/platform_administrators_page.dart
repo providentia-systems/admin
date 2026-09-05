@@ -3,20 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
-import 'platform_administration_controller.dart';
-import 'platform_administrator_models.dart';
-import 'platform_administrator_repository.dart';
+import '../../core/auth/session_controller.dart';
+import '../access/access_groups_page.dart';
+import '../access/access_repository.dart';
 
 final class PlatformAdministratorsPage extends StatefulWidget {
   const PlatformAdministratorsPage({
     required this.api,
-    this.administrationPort,
+    required this.session,
     super.key,
   });
-
   final AdminApi api;
-  final PlatformAdministrationPort? administrationPort;
-
+  final SessionController session;
   @override
   State<PlatformAdministratorsPage> createState() =>
       _PlatformAdministratorsPageState();
@@ -24,183 +22,220 @@ final class PlatformAdministratorsPage extends StatefulWidget {
 
 class _PlatformAdministratorsPageState
     extends State<PlatformAdministratorsPage> {
-  late final PlatformAdministrationController _controller;
-  final _email = TextEditingController();
-
+  var _busy = true;
+  String? _error;
+  List<Record> _administrators = <Record>[];
   @override
   void initState() {
     super.initState();
-    _controller = PlatformAdministrationController(
-      widget.administrationPort ?? PlatformAdministratorRepository(widget.api),
-    );
-    unawaited(_controller.load());
+    unawaited(_load());
   }
 
-  @override
-  void dispose() {
-    _email.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder: (context, _) {
-      final snapshot = _controller.snapshot;
-      final activeCount = snapshot.administrators
-          .where(
-            (administrator) =>
-                administrator.status == PlatformAdministratorStatus.active,
-          )
-          .length;
-      return Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Text(
-              'Platform administrators',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Grant the global operator role by verified email address. '
-              'Pending grants activate after that address completes verification.',
-            ),
-            const SizedBox(height: 20),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    key: const Key('administrator-email'),
-                    controller: _email,
-                    enabled: !snapshot.loading,
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const <String>[AutofillHints.email],
-                    decoration: const InputDecoration(
-                      labelText: 'Administrator email address',
-                      prefixIcon: Icon(Icons.alternate_email),
-                    ),
-                    onSubmitted: snapshot.loading ? null : (_) => _grant(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton.icon(
-                  key: const Key('grant-administrator'),
-                  onPressed: snapshot.loading ? null : _grant,
-                  icon: const Icon(Icons.person_add_alt_1),
-                  label: const Text('Grant'),
-                ),
-                const SizedBox(width: 12),
-                IconButton.filledTonal(
-                  tooltip: 'Refresh administrators',
-                  onPressed: snapshot.loading ? null : _controller.load,
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (snapshot.safeMessage case final message?)
-              MaterialBanner(
-                key: const Key('administrator-safe-message'),
-                content: Text(message),
-                actions: <Widget>[
-                  TextButton(
-                    onPressed: snapshot.loading ? null : _controller.load,
-                    child: const Text('Reload'),
-                  ),
-                ],
-              ),
-            if (snapshot.loading) const LinearProgressIndicator(),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Card(
-                child: snapshot.administrators.isEmpty && !snapshot.loading
-                    ? const Center(
-                        child: Text('No administrator grants were returned.'),
-                      )
-                    : ListView.separated(
-                        itemCount: snapshot.administrators.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final administrator = snapshot.administrators[index];
-                          final isFinalActive =
-                              administrator.status ==
-                                  PlatformAdministratorStatus.active &&
-                              activeCount <= 1;
-                          return ListTile(
-                            key: Key('administrator-${administrator.id}'),
-                            leading: Icon(
-                              administrator.status ==
-                                      PlatformAdministratorStatus.active
-                                  ? Icons.admin_panel_settings
-                                  : Icons.mark_email_unread_outlined,
-                            ),
-                            title: Text(administrator.email),
-                            subtitle: Text(
-                              '${administrator.status.name} • granted '
-                              '${_dateLabel(administrator.createdAt)} • '
-                              'revision ${administrator.revision}',
-                            ),
-                            trailing: Tooltip(
-                              message: isFinalActive
-                                  ? 'The final active platform administrator cannot be revoked.'
-                                  : 'Revoke platform-administrator access',
-                              child: IconButton(
-                                key: Key(
-                                  'revoke-administrator-${administrator.id}',
-                                ),
-                                onPressed: snapshot.loading || isFinalActive
-                                    ? null
-                                    : () => _confirmRevoke(administrator),
-                                icon: const Icon(Icons.person_remove_outlined),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ),
-          ],
-        ),
+  Future<void> _load() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final data = records(
+        (await widget.api.get('/api/v1/admin/administrators')).jsonObject,
       );
-    },
-  );
-
-  Future<void> _grant() async {
-    await _controller.grant(_email.text);
-    if (mounted && _controller.snapshot.safeMessage == null) {
-      _email.clear();
+      if (mounted) {
+        setState(() {
+          _administrators = data;
+          _busy = false;
+        });
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = error is ApiException
+              ? error.message
+              : 'Administrator requests could not be loaded.';
+        });
+      }
     }
   }
 
-  Future<void> _confirmRevoke(PlatformAdministrator administrator) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Revoke platform administrator?'),
-        content: Text(
-          'This removes global operator access for ${administrator.email}. '
-          'The operation is revision-bound and will be rejected if the grant changed.',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+  Future<void> _review(Record administrator, String status) async {
+    try {
+      String? groupId;
+      if (status == 'approved') {
+        final groups = (await AccessRepository(widget.api).groups(
+          'admin',
+        )).where((group) => group['protected'] != true).toList();
+        if (!mounted) return;
+        groupId = await showDialog<String>(
+          context: context,
+          builder: (context) => SimpleDialog(
+            title: const Text('Approve into administrator group'),
+            children: <Widget>[
+              if (groups.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Create an administrator group before approving this request.',
+                  ),
+                ),
+              for (final group in groups)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, group['id']),
+                  child: Text('${group['name']}'),
+                ),
+            ],
           ),
-          FilledButton(
-            key: const Key('confirm-revoke-administrator'),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Revoke access'),
+        );
+        if (groupId == null || !mounted) return;
+      } else {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(
+              '${status == 'suspended' ? 'Suspend' : 'Reject'} administrator?',
+            ),
+            content: Text(
+              '${administrator['email']} will have no administrative access.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Confirm'),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-    if (confirmed == true) await _controller.revoke(administrator);
+        );
+        if (confirmed != true || !mounted) return;
+      }
+      setState(() => _busy = true);
+      await widget.api.post(
+        '/api/v1/admin/administrators/${administrator['user_id']}/review',
+        body: <String, Object?>{
+          'status': status,
+          'groupId': ?groupId,
+          'expectedRevision': integer(administrator['revision']),
+          'assignmentRevision': integer(
+            administrator['groupAssignmentRevision'],
+          ),
+        },
+      );
+      if (mounted) await _load();
+    } on Object catch (error) {
+      if (error is ApiException && error.isConflict && mounted) await _load();
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = error is ApiException
+              ? error.message
+              : 'Administrator access could not be changed.';
+        });
+      }
+    }
   }
 
-  static String _dateLabel(DateTime value) =>
-      value.toUtc().toIso8601String().substring(0, 10);
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                'Administrators',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+            ),
+            IconButton(
+              onPressed: _busy ? null : _load,
+              tooltip: 'Reload administrators',
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+        ),
+        const Text(
+          'New administrators verify their email, complete their profile and wait for approval into one administrator group.',
+        ),
+        if (_busy) const LinearProgressIndicator(),
+        if (_error != null)
+          Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        Expanded(
+          child: ListView(
+            children: <Widget>[
+              for (final admin in _administrators)
+                Card(
+                  child: ListTile(
+                    title: Text('${admin['displayName'] ?? admin['email']}'),
+                    subtitle: Text(
+                      '${admin['email']} · ${admin['status']} · ${admin['groupName'] ?? 'No group'}',
+                    ),
+                    trailing:
+                        admin['user_id'] == widget.session.userId ||
+                            (admin['systemOwner'] == true || admin['systemOwner'] == 1)
+                        ? const Icon(Icons.lock_outline)
+                        : Wrap(
+                            spacing: 8,
+                            children: <Widget>[
+                              if (widget.session.authorization.has(
+                                'administrators.approve',
+                              )) ...<Widget>[
+                                if (admin['status'] != 'approved')
+                                  TextButton(
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _review(admin, 'approved'),
+                                    child: const Text('Approve'),
+                                  ),
+                                if (admin['status'] == 'pending')
+                                  TextButton(
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _review(admin, 'rejected'),
+                                    child: const Text('Reject'),
+                                  ),
+                                if (admin['status'] == 'approved')
+                                  TextButton(
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _review(admin, 'suspended'),
+                                    child: const Text('Suspend'),
+                                  ),
+                              ],
+                              if (admin['status'] == 'approved' &&
+                                  widget.session.authorization.has(
+                                    'administrators.manage',
+                                  ))
+                                TextButton(
+                                  onPressed: _busy
+                                      ? null
+                                      : () async {
+                                          final changed =
+                                              await showGroupAssignment(
+                                                context,
+                                                widget.api,
+                                                'admin',
+                                                '${admin['user_id']}',
+                                              );
+                                          if (changed && mounted) await _load();
+                                        },
+                                  child: const Text('Change group'),
+                                ),
+                            ],
+                          ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
