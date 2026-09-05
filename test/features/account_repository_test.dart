@@ -1,3 +1,4 @@
+import 'package:providentia_admin/features/access/access_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:providentia_admin/features/accounts/account_repository.dart';
 
@@ -17,7 +18,7 @@ void main() {
     'closedAt': null,
     'homeCount': 1,
     'activeSessionCount': 2,
-    'platformRoles': <Object?>['platform_administrator'],
+    'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
   };
 
   test('lists privacy-safe accounts with explicit filters', () async {
@@ -59,26 +60,11 @@ void main() {
     });
   });
 
-  test('role grant and revoke share canonical revision-bound route', () async {
-    final api = FakeApi((_) async => jsonResponse(account));
-    final repository = AccountRepository(api);
-
-    await repository.changeRole(
-      userId: account['userId']! as String,
-      role: 'catalog_reviewer',
-      expectedRevision: 3,
-      grant: true,
-    );
-    await repository.changeRole(
-      userId: account['userId']! as String,
-      role: 'catalog_reviewer',
-      expectedRevision: 4,
-      grant: false,
-    );
-
-    expect(api.requests[0].method, 'PUT');
-    expect(api.requests[1].method, 'DELETE');
-    expect(api.requests[0].path, api.requests[1].path);
-    expect(api.requests[1].body, <String, Object?>{'expectedRevision': 4});
+  test('account assignment uses its own revision and one group', () async {
+    final api = FakeApi((_) async => jsonResponse({}));
+    await AccessRepository(api).assign('account','account-id','group-id',4);
+    expect(api.requests.single.method,'PUT');
+    expect(api.requests.single.path,'/api/v1/admin/access/account/account-id');
+    expect(api.requests.single.body,{'groupId':'group-id','expectedRevision':4});
   });
 }

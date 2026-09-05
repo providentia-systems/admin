@@ -26,21 +26,21 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: LoginPage(session: session)));
     await tester.enterText(find.byType(TextField), 'not-an-email');
-    await tester.tap(find.text('Send secure sign-in link'));
+    await tester.tap(find.text('Email me a code'));
     await tester.pump();
 
-    expect(find.text('Enter a valid operator email address.'), findsOneWidget);
+    expect(find.text('Enter a valid email address.'), findsOneWidget);
     expect(api.requests, isEmpty);
   });
 
-  testWidgets('login-link flow polls while pending and cancels safely', (
+  testWidgets('code entry waits without polling and cancels safely', (
     tester,
   ) async {
     late String requestId;
     final api = FakeApi((request) async {
-      if (request.path == '/api/v1/auth/login-links') {
+      if (request.path == '/api/v1/auth/email-codes') {
         requestId =
-            (request.body! as Map<String, Object?>)['requestId']! as String;
+            '11111111-1111-4111-8111-111111111111';
         return jsonResponse(<String, Object?>{
           'accepted': true,
           'requestId': requestId,
@@ -62,7 +62,7 @@ void main() {
               .toIso8601String(),
         });
       }
-      if (request.path.endsWith('/cancel')) {
+      if (request.path.endsWith('/logout')) {
         return jsonResponse(const <String, Object?>{});
       }
       throw StateError('unexpected ${request.path}');
@@ -71,40 +71,40 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: LoginPage(session: session)));
     await tester.enterText(find.byType(TextField), 'operator@example.test');
-    await tester.tap(find.text('Send secure sign-in link'));
+    await tester.tap(find.text('Email me a code'));
     // The pending view animates an indeterminate progress bar, so settle-style
     // pumping would never finish; bounded pumps flush the async transitions.
     await tester.pump();
     await tester.pump();
 
     expect(session.phase, SessionPhase.loginPending);
-    expect(find.textContaining('Open the secure link'), findsOneWidget);
+    expect(find.textContaining('Enter the eight-digit code'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 2));
     await tester.pump();
     await tester.pump();
     expect(
       api.requests.where((request) => request.path.endsWith('/status')),
-      isNotEmpty,
+      isEmpty,
     );
     expect(session.phase, SessionPhase.loginPending);
 
-    await tester.tap(find.text('Cancel sign-in'));
+    await tester.tap(find.text('Use another email'));
     await tester.pump();
     await tester.pump();
 
     expect(session.phase, SessionPhase.signedOut);
     expect(
-      api.requests.where((request) => request.path.endsWith('/cancel')),
+      api.requests.where((request) => request.path.endsWith('/logout')),
       isNotEmpty,
     );
     expect(
-      find.text('Sign in with an account that has a platform operator role.'),
+      find.text('Enter your email to sign in or request administrator access.'),
       findsOneWidget,
     );
   });
 
-  testWidgets('a failed link request surfaces a safe error message', (
+  testWidgets('a failed code request surfaces a safe error message', (
     tester,
   ) async {
     final api = FakeApi((_) async => throw StateError('transport detail'));
@@ -112,10 +112,10 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: LoginPage(session: session)));
     await tester.enterText(find.byType(TextField), 'operator@example.test');
-    await tester.tap(find.text('Send secure sign-in link'));
+    await tester.tap(find.text('Email me a code'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sign-in could not be completed safely.'), findsOneWidget);
+    expect(find.text('Sign-in could not be completed. Check your code and connection, then try again.'), findsOneWidget);
     expect(find.textContaining('transport detail'), findsNothing);
     expect(session.phase, SessionPhase.signedOut);
   });

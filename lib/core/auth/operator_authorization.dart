@@ -11,7 +11,8 @@ final class OperatorAuthorization {
   const OperatorAuthorization._(this.permissions, this.capabilities);
 
   factory OperatorAuthorization.fromPermissions(Iterable<String> values) {
-    final permissions = values.toSet();
+    const known = <String>{'accounts.read', 'accounts.manage', 'accounts.assign', 'people.read', 'homes.read', 'homes.assign', 'homes.manage', 'administrators.read', 'administrators.approve', 'administrators.manage', 'groups.manage', 'countries.manage', 'policies.manage', 'catalog.read', 'catalog.review', 'catalog.curate', 'billing.read', 'billing.manage', 'audit.read'};
+    final permissions = values.where(known.contains).toSet();
     final mapping = <OperatorCapability, String>{
       OperatorCapability.manageAccounts: 'accounts.read',
       OperatorCapability.manageAdministrators: 'administrators.read',

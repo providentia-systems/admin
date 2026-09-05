@@ -44,7 +44,7 @@ Map<String, String> memoryStoredSession() => <String, String>{
   'deviceId': '22222222-2222-4222-8222-222222222222',
   'installationId': memoryInstallationId,
   'userId': '0198f4e3-7abc-7def-8abc-0123456789ab',
-  'accessExpiresAt': '2026-09-01T00:00:00Z',
+  'accessExpiresAt': _fixtureAccessExpiry,
   'refreshExpiresAt': '2026-10-01T00:00:00Z',
   'idleExpiresAt': '2026-10-01T00:00:00Z',
   'refreshIdleTtlSeconds': '2592000',
