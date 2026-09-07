@@ -1,5 +1,5 @@
-import 'package:providentia_admin/features/access/access_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:providentia_admin/features/access/access_repository.dart';
 import 'package:providentia_admin/features/accounts/account_repository.dart';
 
 import '../support/fake_api.dart';
@@ -18,7 +18,31 @@ void main() {
     'closedAt': null,
     'homeCount': 1,
     'activeSessionCount': 2,
-    'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
+    'profile': <String, Object?>{
+      'administratorAccess': <String, Object?>{
+        'features': <String, Object?>{
+          'accounts.read': true,
+          'accounts.manage': true,
+          'accounts.assign': true,
+          'people.read': true,
+          'homes.read': true,
+          'homes.manage': true,
+          'homes.assign': true,
+          'administrators.read': true,
+          'administrators.approve': true,
+          'administrators.manage': true,
+          'groups.manage': true,
+          'countries.manage': true,
+          'policies.manage': true,
+          'catalog.read': true,
+          'catalog.review': true,
+          'catalog.curate': true,
+          'billing.read': true,
+          'billing.manage': true,
+          'audit.read': true,
+        },
+      },
+    },
   };
 
   test('lists privacy-safe accounts with explicit filters', () async {
@@ -62,9 +86,12 @@ void main() {
 
   test('account assignment uses its own revision and one group', () async {
     final api = FakeApi((_) async => jsonResponse({}));
-    await AccessRepository(api).assign('account','account-id','group-id',4);
-    expect(api.requests.single.method,'PUT');
-    expect(api.requests.single.path,'/api/v1/admin/access/account/account-id');
-    expect(api.requests.single.body,{'groupId':'group-id','expectedRevision':4});
+    await AccessRepository(api).assign('account', 'account-id', 'group-id', 4);
+    expect(api.requests.single.method, 'PUT');
+    expect(api.requests.single.path, '/api/v1/admin/access/account/account-id');
+    expect(api.requests.single.body, {
+      'groupId': 'group-id',
+      'expectedRevision': 4,
+    });
   });
 }

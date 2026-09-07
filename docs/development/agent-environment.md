@@ -40,19 +40,24 @@ depend on whether the build host happens to expose a JDK. The lock, generated
 plugin list, CMake configuration and packaged-artifact verifier all reject JNI;
 do not remove this pin until the upstream Linux graph is demonstrably JNI-free.
 
-The Linux desktop package registers `providentia-admin://` for application-owned
-login approvals. Development and test links must carry approval credentials in
-the URI fragment, never the query string. The native runner forwards accepted
-links through the isolated `providentia.admin.application_links` channel and
-does not print or persist them. The Flutter parser enforces the Admin scheme,
-host, path, application kind, request identifier and credential bounds before
-any network call.
+Authentication uses an eight-digit email code entered in the Admin client.
+The Linux desktop package launches the application normally and does not register
+an authentication URI scheme. No application-link base, browser approval page,
+callback listener or polling worker is required. The backend email service must
+be configured; local development can use its Mailpit service to read the code.
+The requesting installation retains its binding proof in the isolated Admin
+keyring namespace and sends it only to the code-verification JSON endpoint.
 
-Production backend deployment must configure
-`ADMIN_APP_LINK_BASE=providentia-admin://login-link/admin`. The backend appends
-only the login-link fragment contract to this exact Linux-owned base. Do not
-substitute an HTTPS `/auth` page, a homeowner scheme or a shared credential
-namespace; Admin has no browser login surface.
+Create the first system owner in the backend before signing in:
+
+```bash
+php bin/providentia system:owner owner@example.com
+```
+
+This command authorizes one bootstrap identity. Sign in to Admin with that
+address, enter the email code, complete the profile and country agreement, then
+configure administrator groups and approve additional applicants. Repeating the
+command with the same address is idempotent; it cannot replace the system owner.
 
 ## Validate
 

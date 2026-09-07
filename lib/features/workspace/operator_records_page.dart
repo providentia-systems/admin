@@ -7,6 +7,7 @@ import '../../core/api/api_client.dart';
 import '../../core/auth/operator_authorization.dart';
 import '../access/access_groups_page.dart';
 import '../access/access_repository.dart';
+import 'operator_image.dart';
 
 /// Paged operator projection. The backend authorizes every collection read.
 final class OperatorRecordsPage extends StatefulWidget {
@@ -173,6 +174,16 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
               },
             ),
           if (_home != null) ...<Widget>[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OperatorImage(
+                api: widget.api,
+                path:
+                    '/api/v1/admin/homes/${Uri.encodeComponent('${_home!['id']}')}/image',
+                label: 'Home image',
+                placeholder: Icons.home_outlined,
+              ),
+            ),
             Wrap(
               spacing: 16,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -253,6 +264,8 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
                       child: DataTable(
                         showCheckboxColumn: false,
                         columns: <DataColumn>[
+                          if (_home == null && !widget.audit)
+                            const DataColumn(label: Text('Open')),
                           for (final key in keys)
                             DataColumn(label: Text(displayLabel(key))),
                         ],
@@ -263,6 +276,16 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
                                   ? (_) => _open(row)
                                   : null,
                               cells: <DataCell>[
+                                if (_home == null && !widget.audit)
+                                  DataCell(
+                                    IconButton(
+                                      tooltip: 'Open ${row['name']}',
+                                      icon: const Icon(Icons.open_in_new),
+                                      onPressed: _busy
+                                          ? null
+                                          : () => _open(row),
+                                    ),
+                                  ),
                                 for (final key in keys)
                                   DataCell(
                                     ConstrainedBox(

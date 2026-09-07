@@ -8,7 +8,15 @@ import 'package:providentia_admin/core/auth/session_controller.dart';
 
 import '../support/fake_api.dart';
 
-final _fixtureAccessExpiry = DateTime.now().toUtc().add(const Duration(hours:1)).toIso8601String();
+final _fixtureSessionExpiry = DateTime.now()
+    .toUtc()
+    .add(const Duration(days: 30))
+    .toIso8601String();
+
+final _fixtureAccessExpiry = DateTime.now()
+    .toUtc()
+    .add(const Duration(hours: 1))
+    .toIso8601String();
 
 const installationId = '44444444-4444-4444-8444-444444444444';
 
@@ -21,6 +29,10 @@ final class MemoryCredentialStore implements CredentialStore {
   var failClears = false;
   Completer<void>? sessionWriteBarrier;
   Completer<void>? sessionWriteStarted;
+  Completer<void>? sessionReadStarted;
+  Completer<void>? sessionReadBarrier;
+  Completer<void>? pendingReadStarted;
+  Completer<void>? pendingReadBarrier;
 
   @override
   Future<void> clearSession() async {
@@ -36,10 +48,20 @@ final class MemoryCredentialStore implements CredentialStore {
   Future<String?> readInstallationId() async => installationId;
 
   @override
-  Future<Map<String, String>> readPendingLogin() async => Map.of(pending);
+  Future<Map<String, String>> readPendingLogin() async {
+    final result = Map<String, String>.of(pending);
+    pendingReadStarted?.complete();
+    await pendingReadBarrier?.future;
+    return result;
+  }
 
   @override
-  Future<Map<String, String>> readSession() async => Map.of(session);
+  Future<Map<String, String>> readSession() async {
+    final result = Map<String, String>.of(session);
+    sessionReadStarted?.complete();
+    await sessionReadBarrier?.future;
+    return result;
+  }
 
   @override
   Future<void> writeInstallationId(String value) async =>
@@ -68,8 +90,8 @@ Map<String, String> storedSession() => <String, String>{
   'installationId': installationId,
   'userId': '0198f4e3-7abc-7def-8abc-0123456789ab',
   'accessExpiresAt': _fixtureAccessExpiry,
-  'refreshExpiresAt': '2026-10-01T00:00:00Z',
-  'idleExpiresAt': '2026-10-01T00:00:00Z',
+  'refreshExpiresAt': _fixtureSessionExpiry,
+  'idleExpiresAt': _fixtureSessionExpiry,
   'refreshIdleTtlSeconds': '2592000',
   'transport': 'native',
 };
@@ -134,7 +156,14 @@ void main() {
     final api = FakeApi(
       (_) async => jsonResponse(<String, Object?>{
         'userId': storedSession()['userId'],
-        'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'catalog.read': true, 'catalog.review': true}}},
+        'profile': <String, Object?>{
+          'administratorAccess': <String, Object?>{
+            'features': <String, Object?>{
+              'catalog.read': true,
+              'catalog.review': true,
+            },
+          },
+        },
         'activeHomeId': null,
         'homes': <Object?>[],
       }),
@@ -151,24 +180,31 @@ void main() {
     expect(api.requests.single.path, '/api/v1/me');
   });
 
-  test('unknown permissions allow onboarding without operator access', () async {
-    final store = MemoryCredentialStore()
-      ..installationId = installationId
-      ..session = storedSession();
-    final api = FakeApi(
-      (_) async => jsonResponse(<String, Object?>{
-        'userId': storedSession()['userId'],
-        'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{}}},
-      }),
-    );
-    final controller = SessionController(api: api, credentialStore: store);
+  test(
+    'unknown permissions allow onboarding without operator access',
+    () async {
+      final store = MemoryCredentialStore()
+        ..installationId = installationId
+        ..session = storedSession();
+      final api = FakeApi(
+        (_) async => jsonResponse(<String, Object?>{
+          'userId': storedSession()['userId'],
+          'profile': <String, Object?>{
+            'administratorAccess': <String, Object?>{
+              'features': <String, Object?>{},
+            },
+          },
+        }),
+      );
+      final controller = SessionController(api: api, credentialStore: store);
 
-    await controller.restore();
+      await controller.restore();
 
-    expect(controller.phase, SessionPhase.authenticated);
-    expect(controller.authorization.isOperator, isFalse);
-    expect(store.session, isNotEmpty);
-  });
+      expect(controller.phase, SessionPhase.authenticated);
+      expect(controller.authorization.isOperator, isFalse);
+      expect(store.session, isNotEmpty);
+    },
+  );
 
   test('authorization loss purges privileged state synchronously', () async {
     final store = MemoryCredentialStore()
@@ -177,7 +213,31 @@ void main() {
     final api = FakeApi(
       (_) async => jsonResponse(<String, Object?>{
         'userId': storedSession()['userId'],
-        'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
+        'profile': <String, Object?>{
+          'administratorAccess': <String, Object?>{
+            'features': <String, Object?>{
+              'accounts.read': true,
+              'accounts.manage': true,
+              'accounts.assign': true,
+              'people.read': true,
+              'homes.read': true,
+              'homes.manage': true,
+              'homes.assign': true,
+              'administrators.read': true,
+              'administrators.approve': true,
+              'administrators.manage': true,
+              'groups.manage': true,
+              'countries.manage': true,
+              'policies.manage': true,
+              'catalog.read': true,
+              'catalog.review': true,
+              'catalog.curate': true,
+              'billing.read': true,
+              'billing.manage': true,
+              'audit.read': true,
+            },
+          },
+        },
       }),
     );
     final controller = SessionController(api: api, credentialStore: store);
@@ -203,7 +263,31 @@ void main() {
         if (request.path == '/api/v1/me') {
           return jsonResponse(<String, Object?>{
             'userId': storedSession()['userId'],
-            'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
+            'profile': <String, Object?>{
+              'administratorAccess': <String, Object?>{
+                'features': <String, Object?>{
+                  'accounts.read': true,
+                  'accounts.manage': true,
+                  'accounts.assign': true,
+                  'people.read': true,
+                  'homes.read': true,
+                  'homes.manage': true,
+                  'homes.assign': true,
+                  'administrators.read': true,
+                  'administrators.approve': true,
+                  'administrators.manage': true,
+                  'groups.manage': true,
+                  'countries.manage': true,
+                  'policies.manage': true,
+                  'catalog.read': true,
+                  'catalog.review': true,
+                  'catalog.curate': true,
+                  'billing.read': true,
+                  'billing.manage': true,
+                  'audit.read': true,
+                },
+              },
+            },
           });
         }
         if (request.path == '/api/v1/auth/logout') {
@@ -238,7 +322,31 @@ void main() {
         if (request.path == '/api/v1/me') {
           return jsonResponse(<String, Object?>{
             'userId': storedSession()['userId'],
-            'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
+            'profile': <String, Object?>{
+              'administratorAccess': <String, Object?>{
+                'features': <String, Object?>{
+                  'accounts.read': true,
+                  'accounts.manage': true,
+                  'accounts.assign': true,
+                  'people.read': true,
+                  'homes.read': true,
+                  'homes.manage': true,
+                  'homes.assign': true,
+                  'administrators.read': true,
+                  'administrators.approve': true,
+                  'administrators.manage': true,
+                  'groups.manage': true,
+                  'countries.manage': true,
+                  'policies.manage': true,
+                  'catalog.read': true,
+                  'catalog.review': true,
+                  'catalog.curate': true,
+                  'billing.read': true,
+                  'billing.manage': true,
+                  'audit.read': true,
+                },
+              },
+            },
           });
         }
         if (request.path == '/api/v1/auth/logout') {
@@ -283,7 +391,31 @@ void main() {
       if (request.path == '/api/v1/me') {
         return jsonResponse(<String, Object?>{
           'userId': storedSession()['userId'],
-          'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
+          'profile': <String, Object?>{
+            'administratorAccess': <String, Object?>{
+              'features': <String, Object?>{
+                'accounts.read': true,
+                'accounts.manage': true,
+                'accounts.assign': true,
+                'people.read': true,
+                'homes.read': true,
+                'homes.manage': true,
+                'homes.assign': true,
+                'administrators.read': true,
+                'administrators.approve': true,
+                'administrators.manage': true,
+                'groups.manage': true,
+                'countries.manage': true,
+                'policies.manage': true,
+                'catalog.read': true,
+                'catalog.review': true,
+                'catalog.curate': true,
+                'billing.read': true,
+                'billing.manage': true,
+                'audit.read': true,
+              },
+            },
+          },
         });
       }
       throw StateError('unexpected ${request.path}');
@@ -311,17 +443,16 @@ void main() {
       late String expiresAt;
       final api = FakeApi((request) async {
         if (request.path == '/api/v1/auth/email-codes') {
-          requestId =
-              '11111111-1111-4111-8111-111111111111';
+          requestId = '11111111-1111-4111-8111-111111111111';
           expiresAt = DateTime.now()
               .toUtc()
               .add(const Duration(minutes: 10))
               .toIso8601String();
           return jsonResponse(<String, Object?>{
-            'accepted': true,
-            'requestId': requestId,
+            'challengeId': requestId,
+            'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'resendAfterSeconds': 60,
             'expiresAt': expiresAt,
-            'pollIntervalSeconds': 2,
           });
         }
         if (request.path.endsWith('/status')) {
@@ -343,7 +474,14 @@ void main() {
         if (request.path == '/api/v1/me') {
           return jsonResponse(<String, Object?>{
             'userId': storedSession()['userId'],
-            'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'catalog.read': true, 'catalog.review': true}}},
+            'profile': <String, Object?>{
+              'administratorAccess': <String, Object?>{
+                'features': <String, Object?>{
+                  'catalog.read': true,
+                  'catalog.review': true,
+                },
+              },
+            },
           });
         }
         throw StateError('unexpected ${request.path}');
@@ -397,7 +535,7 @@ void main() {
     final store = MemoryCredentialStore()
       ..installationId = installationId
       ..session = (durableStoredSession()
-        ..['refreshExpiresAt'] = '2026-10-01T00:00:00Z');
+        ..['refreshExpiresAt'] = _fixtureSessionExpiry);
     final controller = SessionController(
       api: FakeApi((_) async => throw StateError('must not call API')),
       credentialStore: store,
@@ -419,7 +557,31 @@ void main() {
       if (request.path == '/api/v1/me') {
         return jsonResponse(<String, Object?>{
           'userId': storedSession()['userId'],
-          'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
+          'profile': <String, Object?>{
+            'administratorAccess': <String, Object?>{
+              'features': <String, Object?>{
+                'accounts.read': true,
+                'accounts.manage': true,
+                'accounts.assign': true,
+                'people.read': true,
+                'homes.read': true,
+                'homes.manage': true,
+                'homes.assign': true,
+                'administrators.read': true,
+                'administrators.approve': true,
+                'administrators.manage': true,
+                'groups.manage': true,
+                'countries.manage': true,
+                'policies.manage': true,
+                'catalog.read': true,
+                'catalog.review': true,
+                'catalog.curate': true,
+                'billing.read': true,
+                'billing.manage': true,
+                'audit.read': true,
+              },
+            },
+          },
         });
       }
       throw StateError('network unavailable');
@@ -444,7 +606,14 @@ void main() {
     final api = FakeApi(
       (_) async => jsonResponse(<String, Object?>{
         'userId': storedSession()['userId'],
-        'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'catalog.read': true, 'catalog.review': true}}},
+        'profile': <String, Object?>{
+          'administratorAccess': <String, Object?>{
+            'features': <String, Object?>{
+              'catalog.read': true,
+              'catalog.review': true,
+            },
+          },
+        },
       }),
     );
     final controller = SessionController(api: api, credentialStore: store);
@@ -469,7 +638,31 @@ void main() {
       if (request.path == '/api/v1/me') {
         return jsonResponse(<String, Object?>{
           'userId': storedSession()['userId'],
-          'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
+          'profile': <String, Object?>{
+            'administratorAccess': <String, Object?>{
+              'features': <String, Object?>{
+                'accounts.read': true,
+                'accounts.manage': true,
+                'accounts.assign': true,
+                'people.read': true,
+                'homes.read': true,
+                'homes.manage': true,
+                'homes.assign': true,
+                'administrators.read': true,
+                'administrators.approve': true,
+                'administrators.manage': true,
+                'groups.manage': true,
+                'countries.manage': true,
+                'policies.manage': true,
+                'catalog.read': true,
+                'catalog.review': true,
+                'catalog.curate': true,
+                'billing.read': true,
+                'billing.manage': true,
+                'audit.read': true,
+              },
+            },
+          },
         });
       }
       if (request.path == '/api/v1/auth/refresh') {
@@ -503,7 +696,14 @@ void main() {
       if (request.path == '/api/v1/me') {
         return jsonResponse(<String, Object?>{
           'userId': storedSession()['userId'],
-          'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'catalog.read': true, 'catalog.review': true}}},
+          'profile': <String, Object?>{
+            'administratorAccess': <String, Object?>{
+              'features': <String, Object?>{
+                'catalog.read': true,
+                'catalog.review': true,
+              },
+            },
+          },
         });
       }
       return jsonResponse(rotatedSession());
@@ -527,7 +727,14 @@ void main() {
       if (request.path == '/api/v1/me') {
         return jsonResponse(<String, Object?>{
           'userId': storedSession()['userId'],
-          'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'billing.read': true, 'billing.manage': true}}},
+          'profile': <String, Object?>{
+            'administratorAccess': <String, Object?>{
+              'features': <String, Object?>{
+                'billing.read': true,
+                'billing.manage': true,
+              },
+            },
+          },
         });
       }
       throw const ApiException(statusCode: 401, message: 'invalid refresh');
@@ -551,7 +758,15 @@ void main() {
         if (request.path == '/api/v1/me') {
           return jsonResponse(<String, Object?>{
             'userId': storedSession()['userId'],
-            'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'catalog.read': true, 'catalog.review': true, 'catalog.curate': true}}},
+            'profile': <String, Object?>{
+              'administratorAccess': <String, Object?>{
+                'features': <String, Object?>{
+                  'catalog.read': true,
+                  'catalog.review': true,
+                  'catalog.curate': true,
+                },
+              },
+            },
           });
         }
         return jsonResponse(
@@ -577,7 +792,31 @@ void main() {
       if (request.path == '/api/v1/me') {
         return jsonResponse(<String, Object?>{
           'userId': storedSession()['userId'],
-          'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
+          'profile': <String, Object?>{
+            'administratorAccess': <String, Object?>{
+              'features': <String, Object?>{
+                'accounts.read': true,
+                'accounts.manage': true,
+                'accounts.assign': true,
+                'people.read': true,
+                'homes.read': true,
+                'homes.manage': true,
+                'homes.assign': true,
+                'administrators.read': true,
+                'administrators.approve': true,
+                'administrators.manage': true,
+                'groups.manage': true,
+                'countries.manage': true,
+                'policies.manage': true,
+                'catalog.read': true,
+                'catalog.review': true,
+                'catalog.curate': true,
+                'billing.read': true,
+                'billing.manage': true,
+                'audit.read': true,
+              },
+            },
+          },
         });
       }
       if (request.path == '/api/v1/auth/refresh') {
@@ -610,13 +849,13 @@ void main() {
       final api = FakeApi((request) async {
         startBody = request.body! as Map<String, Object?>;
         return jsonResponse(<String, Object?>{
-          'accepted': true,
-          'requestId': startBody['requestId'],
+          'challengeId': '11111111-1111-4111-8111-111111111111',
+          'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'resendAfterSeconds': 60,
           'expiresAt': DateTime.now()
               .toUtc()
               .add(const Duration(minutes: 10))
               .toIso8601String(),
-          'pollIntervalSeconds': 2,
         });
       });
       final controller = SessionController(api: api, credentialStore: store);
@@ -649,10 +888,10 @@ void main() {
               .add(const Duration(minutes: 10))
               .toIso8601String();
           return jsonResponse(<String, Object?>{
-            'accepted': true,
-            'requestId': requestId,
+            'challengeId': requestId,
+            'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'resendAfterSeconds': 60,
             'expiresAt': expiresAt,
-            'pollIntervalSeconds': 2,
           });
         }
         if (request.path.endsWith('/status')) {
@@ -673,7 +912,14 @@ void main() {
         if (request.path == '/api/v1/me') {
           return jsonResponse(<String, Object?>{
             'userId': storedSession()['userId'],
-            'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'catalog.read': true, 'catalog.review': true}}},
+            'profile': <String, Object?>{
+              'administratorAccess': <String, Object?>{
+                'features': <String, Object?>{
+                  'catalog.read': true,
+                  'catalog.review': true,
+                },
+              },
+            },
             'activeHomeId': null,
             'homes': <Object?>[],
           });
@@ -709,17 +955,16 @@ void main() {
       late String expiresAt;
       final api = FakeApi((request) async {
         if (request.path == '/api/v1/auth/email-codes') {
-          requestId =
-              '11111111-1111-4111-8111-111111111111';
+          requestId = '11111111-1111-4111-8111-111111111111';
           expiresAt = DateTime.now()
               .toUtc()
               .add(const Duration(minutes: 10))
               .toIso8601String();
           return jsonResponse(<String, Object?>{
-            'accepted': true,
-            'requestId': requestId,
+            'challengeId': requestId,
+            'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'resendAfterSeconds': 60,
             'expiresAt': expiresAt,
-            'pollIntervalSeconds': 2,
           });
         }
         if (request.path.endsWith('/status')) {
@@ -742,7 +987,10 @@ void main() {
       await controller.restore();
       await controller.requestEmailCode('operator@example.test');
 
-      await expectLater(controller.verifyEmailCode('12345678'), throwsFormatException);
+      await expectLater(
+        controller.verifyEmailCode('12345678'),
+        throwsFormatException,
+      );
 
       expect(controller.phase, SessionPhase.signedOut);
       expect(controller.accessToken, isNull);
@@ -759,17 +1007,16 @@ void main() {
       late String expiresAt;
       final api = FakeApi((request) async {
         if (request.path == '/api/v1/auth/email-codes') {
-          requestId =
-              '11111111-1111-4111-8111-111111111111';
+          requestId = '11111111-1111-4111-8111-111111111111';
           expiresAt = DateTime.now()
               .toUtc()
               .add(const Duration(minutes: 10))
               .toIso8601String();
           return jsonResponse(<String, Object?>{
-            'accepted': true,
-            'requestId': requestId,
+            'challengeId': requestId,
+            'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'resendAfterSeconds': 60,
             'expiresAt': expiresAt,
-            'pollIntervalSeconds': 2,
           });
         }
         return jsonResponse(<String, Object?>{
@@ -783,7 +1030,10 @@ void main() {
       await controller.restore();
       await controller.requestEmailCode('operator@example.test');
 
-      await expectLater(controller.verifyEmailCode('12345678'), throwsFormatException);
+      await expectLater(
+        controller.verifyEmailCode('12345678'),
+        throwsFormatException,
+      );
 
       expect(controller.phase, SessionPhase.signedOut);
       expect(controller.error, isNot(contains('server_internal_detail')));
@@ -791,46 +1041,58 @@ void main() {
     },
   );
 
-  test('corrupted restored login challenge is purged before verification', () async {
-    final store = MemoryCredentialStore()
-      ..installationId = installationId
-      ..pending = <String, String>{
-        'requestId': 'not-a-uuid',
-        'pollToken': 'short',
-        'codeVerifier': 'short',
-        'state': 'short',
+  test(
+    'corrupted restored login challenge is purged before verification',
+    () async {
+      final store = MemoryCredentialStore()
+        ..installationId = installationId
+        ..pending = <String, String>{
+          'challengeId': 'not-a-uuid',
+          'bindingToken': 'short',
+          'email': 'person@example.test',
+          'expiresAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 10))
+              .toIso8601String(),
+          'resendAt': DateTime.now().toUtc().toIso8601String(),
+        };
+      final controller = SessionController(
+        api: FakeApi((_) async => throw StateError('must not call API')),
+        credentialStore: store,
+      );
+
+      await controller.restore();
+
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(controller.challenge, isNull);
+      expect(store.pending, isEmpty);
+    },
+  );
+
+  test('a new code request replaces the pending challenge', () async {
+    final store = MemoryCredentialStore();
+    var calls = 0;
+    final api = FakeApi(
+      (request) async => jsonResponse(<String, Object?>{
+        'challengeId': calls++ == 0
+            ? '11111111-1111-4111-8111-111111111111'
+            : '22222222-2222-4222-8222-222222222222',
+        'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         'expiresAt': DateTime.now()
             .toUtc()
             .add(const Duration(minutes: 10))
             .toIso8601String(),
-        'pollIntervalSeconds': '60',
-      };
-    final controller = SessionController(
-      api: FakeApi((_) async => throw StateError('must not call API')),
-      credentialStore: store,
+        'resendAfterSeconds': 60,
+      }),
     );
-
+    final controller = SessionController(api: api, credentialStore: store);
     await controller.restore();
-
-    expect(controller.phase, SessionPhase.signedOut);
-    expect(controller.challenge, isNull);
-    expect(store.pending, isEmpty);
+    await controller.requestEmailCode('first@example.test');
+    final old = controller.challenge!.challengeId;
+    await controller.requestEmailCode('second@example.test');
+    expect(controller.challenge!.challengeId, isNot(old));
+    expect(store.pending['email'], 'second@example.test');
   });
-
-  test('a new code request replaces the pending challenge', () async {
- final store = MemoryCredentialStore();
- var calls = 0;
- final api = FakeApi((request) async => jsonResponse(<String,Object?>{
- 'challengeId': calls++ == 0 ? '11111111-1111-4111-8111-111111111111' : '22222222-2222-4222-8222-222222222222',
- 'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
- 'expiresAt': DateTime.now().toUtc().add(const Duration(minutes:10)).toIso8601String(), 'resendAfterSeconds':60}));
- final controller = SessionController(api:api, credentialStore:store);
- await controller.restore(); await controller.requestEmailCode('first@example.test');
- final old = controller.challenge!.challengeId;
- await controller.requestEmailCode('second@example.test');
- expect(controller.challenge!.challengeId,isNot(old));
- expect(store.pending['email'],'second@example.test');
-});
 
   test(
     'cancellation during exchange persistence cannot restore a session',
@@ -844,17 +1106,16 @@ void main() {
       late String expiresAt;
       final api = FakeApi((request) async {
         if (request.path == '/api/v1/auth/email-codes') {
-          requestId =
-              '11111111-1111-4111-8111-111111111111';
+          requestId = '11111111-1111-4111-8111-111111111111';
           expiresAt = DateTime.now()
               .toUtc()
               .add(const Duration(minutes: 10))
               .toIso8601String();
           return jsonResponse(<String, Object?>{
-            'accepted': true,
-            'requestId': requestId,
+            'challengeId': requestId,
+            'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'resendAfterSeconds': 60,
             'expiresAt': expiresAt,
-            'pollIntervalSeconds': 2,
           });
         }
         if (request.path.endsWith('/status')) {
@@ -901,17 +1162,16 @@ void main() {
       late String expiresAt;
       final api = FakeApi((request) async {
         if (request.path == '/api/v1/auth/email-codes') {
-          requestId =
-              '11111111-1111-4111-8111-111111111111';
+          requestId = '11111111-1111-4111-8111-111111111111';
           expiresAt = DateTime.now()
               .toUtc()
               .add(const Duration(minutes: 10))
               .toIso8601String();
           return jsonResponse(<String, Object?>{
-            'accepted': true,
-            'requestId': requestId,
+            'challengeId': requestId,
+            'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'resendAfterSeconds': 60,
             'expiresAt': expiresAt,
-            'pollIntervalSeconds': 2,
           });
         }
         if (request.path.endsWith('/status')) {
@@ -944,7 +1204,31 @@ void main() {
       meResponse.complete(
         jsonResponse(<String, Object?>{
           'userId': storedSession()['userId'],
-          'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
+          'profile': <String, Object?>{
+            'administratorAccess': <String, Object?>{
+              'features': <String, Object?>{
+                'accounts.read': true,
+                'accounts.manage': true,
+                'accounts.assign': true,
+                'people.read': true,
+                'homes.read': true,
+                'homes.manage': true,
+                'homes.assign': true,
+                'administrators.read': true,
+                'administrators.approve': true,
+                'administrators.manage': true,
+                'groups.manage': true,
+                'countries.manage': true,
+                'policies.manage': true,
+                'catalog.read': true,
+                'catalog.review': true,
+                'catalog.curate': true,
+                'billing.read': true,
+                'billing.manage': true,
+                'audit.read': true,
+              },
+            },
+          },
         }),
       );
 
@@ -966,7 +1250,31 @@ void main() {
       final api = FakeApi(
         (_) async => jsonResponse(<String, Object?>{
           'userId': '55555555-5555-4555-8555-555555555555',
-          'profile': <String,Object?>{'administratorAccess': <String,Object?>{'features': <String,Object?>{'accounts.read': true, 'accounts.manage': true, 'accounts.assign': true, 'people.read': true, 'homes.read': true, 'homes.manage': true, 'homes.assign': true, 'administrators.read': true, 'administrators.approve': true, 'administrators.manage': true, 'groups.manage': true, 'countries.manage': true, 'policies.manage': true, 'catalog.read': true, 'catalog.review': true, 'catalog.curate': true, 'billing.read': true, 'billing.manage': true, 'audit.read': true}}},
+          'profile': <String, Object?>{
+            'administratorAccess': <String, Object?>{
+              'features': <String, Object?>{
+                'accounts.read': true,
+                'accounts.manage': true,
+                'accounts.assign': true,
+                'people.read': true,
+                'homes.read': true,
+                'homes.manage': true,
+                'homes.assign': true,
+                'administrators.read': true,
+                'administrators.approve': true,
+                'administrators.manage': true,
+                'groups.manage': true,
+                'countries.manage': true,
+                'policies.manage': true,
+                'catalog.read': true,
+                'catalog.review': true,
+                'catalog.curate': true,
+                'billing.read': true,
+                'billing.manage': true,
+                'audit.read': true,
+              },
+            },
+          },
         }),
       );
       final controller = SessionController(api: api, credentialStore: store);
@@ -986,16 +1294,15 @@ void main() {
       late String requestId;
       final api = FakeApi((request) async {
         if (request.path == '/api/v1/auth/email-codes') {
-          requestId =
-              '11111111-1111-4111-8111-111111111111';
+          requestId = '11111111-1111-4111-8111-111111111111';
           return jsonResponse(<String, Object?>{
-            'accepted': true,
-            'requestId': requestId,
+            'challengeId': requestId,
+            'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'resendAfterSeconds': 60,
             'expiresAt': DateTime.now()
                 .toUtc()
                 .add(const Duration(minutes: 10))
                 .toIso8601String(),
-            'pollIntervalSeconds': 2,
           });
         }
         return jsonResponse(<String, Object?>{
@@ -1012,7 +1319,10 @@ void main() {
       await controller.restore();
       await controller.requestEmailCode('operator@example.test');
 
-      await expectLater(controller.verifyEmailCode('12345678'), throwsFormatException);
+      await expectLater(
+        controller.verifyEmailCode('12345678'),
+        throwsFormatException,
+      );
 
       expect(controller.phase, SessionPhase.signedOut);
       expect(controller.challenge, isNull);
@@ -1020,54 +1330,235 @@ void main() {
     },
   );
 
-  test('cancellation wins a race with a pending verification response', () async {
-    final store = MemoryCredentialStore();
-    final statusResponse = Completer<ApiResponse>();
-    late String requestId;
-    final api = FakeApi((request) async {
-      if (request.path == '/api/v1/auth/email-codes') {
-        requestId =
-            '11111111-1111-4111-8111-111111111111';
-        return jsonResponse(<String, Object?>{
-          'accepted': true,
+  test(
+    'cancellation wins a race with a pending verification response',
+    () async {
+      final store = MemoryCredentialStore();
+      final statusResponse = Completer<ApiResponse>();
+      late String requestId;
+      final api = FakeApi((request) async {
+        if (request.path == '/api/v1/auth/email-codes') {
+          requestId = '11111111-1111-4111-8111-111111111111';
+          return jsonResponse(<String, Object?>{
+            'challengeId': requestId,
+            'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'resendAfterSeconds': 60,
+            'expiresAt': DateTime.now()
+                .toUtc()
+                .add(const Duration(minutes: 10))
+                .toIso8601String(),
+          });
+        }
+        if (request.path.endsWith('/verify')) return statusResponse.future;
+        if (request.path.endsWith('/logout')) {
+          return jsonResponse(<String, Object?>{});
+        }
+        throw StateError('unexpected ${request.path}');
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      await controller.requestEmailCode('operator@example.test');
+
+      final poll = controller.verifyEmailCode('12345678');
+      await Future<void>.delayed(Duration.zero);
+      await controller.cancelEmailCode();
+      statusResponse.complete(
+        jsonResponse(<String, Object?>{
           'requestId': requestId,
+          'applicationKind': 'admin',
+          'status': 'approved',
           'expiresAt': DateTime.now()
               .toUtc()
               .add(const Duration(minutes: 10))
               .toIso8601String(),
-          'pollIntervalSeconds': 2,
+        }),
+      );
+
+      expect(await poll, isFalse);
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(
+        api.requests.where((request) => request.path.endsWith('/verify')),
+        hasLength(1),
+      );
+    },
+  );
+  test(
+    'sign out clears persisted credentials while the network request is blocked',
+    () async {
+      final store = MemoryCredentialStore()
+        ..installationId = installationId
+        ..session = storedSession();
+      final logout = Completer<ApiResponse>();
+      final api = FakeApi(
+        (request) async => request.path.endsWith('/logout')
+            ? logout.future
+            : jsonResponse({
+                'userId': storedSession()['userId'],
+                'profile': {
+                  'administratorAccess': {
+                    'features': {'accounts.read': true},
+                  },
+                },
+              }),
+      );
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      final signingOut = controller.signOut();
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(store.session, isEmpty);
+      logout.complete(jsonResponse({}));
+      await signingOut;
+      controller.dispose();
+    },
+  );
+
+  test(
+    'a late pending restore cannot erase or replace a newer email request',
+    () async {
+      final store = MemoryCredentialStore()..installationId = installationId;
+      store.pendingReadStarted = Completer<void>();
+      store.pendingReadBarrier = Completer<void>();
+      final api = FakeApi(
+        (_) async => jsonResponse({
+          'challengeId': '11111111-1111-4111-8111-111111111111',
+          'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'expiresAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 10))
+              .toIso8601String(),
+          'resendAfterSeconds': 60,
+        }),
+      );
+      final controller = SessionController(api: api, credentialStore: store);
+      final restoring = controller.restore();
+      await store.pendingReadStarted!.future;
+      await controller.requestEmailCode('new@example.test');
+      store.pendingReadBarrier!.complete();
+      await restoring;
+      expect(controller.phase, SessionPhase.loginPending);
+      expect(controller.challenge?.email, 'new@example.test');
+      expect(store.pending['email'], 'new@example.test');
+      controller.dispose();
+    },
+  );
+  test(
+    'an immediate new code request cannot preserve a signed-out session',
+    () async {
+      final store = MemoryCredentialStore()
+        ..installationId = installationId
+        ..session = storedSession();
+      final logout = Completer<ApiResponse>();
+      final api = FakeApi((request) async {
+        if (request.path.endsWith('/logout')) return logout.future;
+        if (request.path.endsWith('/email-codes')) {
+          return jsonResponse({
+            'challengeId': '11111111-1111-4111-8111-111111111111',
+            'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'expiresAt': DateTime.now()
+                .toUtc()
+                .add(const Duration(minutes: 10))
+                .toIso8601String(),
+            'resendAfterSeconds': 60,
+          });
+        }
+        return jsonResponse({
+          'userId': storedSession()['userId'],
+          'profile': {
+            'administratorAccess': {
+              'features': {'accounts.read': true},
+            },
+          },
         });
-      }
-      if (request.path.endsWith('/verify')) return statusResponse.future;
-      if (request.path.endsWith('/logout')) {
-        return jsonResponse(<String, Object?>{});
-      }
-      throw StateError('unexpected ${request.path}');
-    });
-    final controller = SessionController(api: api, credentialStore: store);
-    await controller.restore();
-    await controller.requestEmailCode('operator@example.test');
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      final signingOut = controller.signOut();
+      await controller.requestEmailCode('new@example.test');
+      expect(store.session, isEmpty);
+      expect(store.pending['email'], 'new@example.test');
+      logout.complete(jsonResponse({}));
+      await signingOut;
+      expect(store.pending['email'], 'new@example.test');
+      controller.dispose();
+    },
+  );
 
-    final poll = controller.verifyEmailCode('12345678');
-    await Future<void>.delayed(Duration.zero);
-    await controller.cancelEmailCode();
-    statusResponse.complete(
-      jsonResponse(<String, Object?>{
-        'requestId': requestId,
-        'applicationKind': 'admin',
-        'status': 'approved',
-        'expiresAt': DateTime.now()
-            .toUtc()
-            .add(const Duration(minutes: 10))
-            .toIso8601String(),
-      }),
-    );
-
-    expect(await poll, isFalse);
-    expect(controller.phase, SessionPhase.signedOut);
-    expect(
-      api.requests.where((request) => request.path.endsWith('/verify')),
-      hasLength(1),
-    );
-  });
+  test(
+    'a late access reload cannot restore permissions removed by the latest reload',
+    () async {
+      final store = MemoryCredentialStore()
+        ..installationId = installationId
+        ..session = storedSession();
+      final responses = <Completer<ApiResponse>>[];
+      var calls = 0;
+      Map<String, Object?> bootstrap(List<String> permissions) => {
+        'userId': storedSession()['userId'],
+        'profile': {
+          'administratorAccess': {
+            'features': {
+              for (final permission in permissions) permission: true,
+            },
+          },
+        },
+      };
+      final api = FakeApi((_) async {
+        if (calls++ == 0) {
+          return jsonResponse(bootstrap(['accounts.read', 'accounts.manage']));
+        }
+        final response = Completer<ApiResponse>();
+        responses.add(response);
+        return response.future;
+      });
+      final controller = SessionController(api: api, credentialStore: store);
+      await controller.restore();
+      final first = controller.reloadProfile();
+      final second = controller.reloadProfile();
+      responses[1].complete(jsonResponse(bootstrap(['accounts.read'])));
+      await second;
+      responses[0].complete(
+        jsonResponse(bootstrap(['accounts.read', 'accounts.manage'])),
+      );
+      await first;
+      expect(controller.authorization.has('accounts.read'), isTrue);
+      expect(controller.authorization.has('accounts.manage'), isFalse);
+      controller.dispose();
+    },
+  );
+  test(
+    'sign out cancels a restore before stored credentials are activated',
+    () async {
+      final store = MemoryCredentialStore()
+        ..installationId = installationId
+        ..session = storedSession();
+      store.sessionReadStarted = Completer<void>();
+      store.sessionReadBarrier = Completer<void>();
+      final api = FakeApi(
+        (request) async => request.path.endsWith('/logout')
+            ? jsonResponse({})
+            : jsonResponse({
+                'userId': storedSession()['userId'],
+                'profile': {
+                  'administratorAccess': {
+                    'features': {'accounts.read': true},
+                  },
+                },
+              }),
+      );
+      final controller = SessionController(api: api, credentialStore: store);
+      final restoring = controller.restore();
+      await store.sessionReadStarted!.future;
+      await controller.signOut();
+      store.sessionReadBarrier!.complete();
+      await restoring;
+      expect(controller.phase, SessionPhase.signedOut);
+      expect(controller.accessToken, isNull);
+      expect(store.session, isEmpty);
+      expect(
+        api.requests.where((request) => request.path == '/api/v1/me'),
+        isEmpty,
+      );
+      controller.dispose();
+    },
+  );
 }

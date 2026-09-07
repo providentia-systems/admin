@@ -2,10 +2,9 @@
 Type=Application
 Name=Providentia Admin
 Comment=Providentia operator control plane
-Exec=providentia_admin %u
+Exec=providentia_admin
 Icon=com.vastdevelopmentmethod.providentia.admin
 Terminal=false
-MimeType=x-scheme-handler/providentia-admin;
 Categories=Utility;System;
 StartupNotify=true
 StartupWMClass=com.vastdevelopmentmethod.providentia.admin

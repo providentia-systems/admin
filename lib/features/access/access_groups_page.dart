@@ -158,34 +158,32 @@ final class GroupEditor extends StatefulWidget {
 }
 
 class _GroupEditorState extends State<GroupEditor> {
+  late Record? _group = widget.group;
   final _form = GlobalKey<FormState>();
-  late final _name = TextEditingController(
-    text: '${widget.group?['name'] ?? ''}',
-  );
+  late final _name = TextEditingController(text: '${_group?['name'] ?? ''}');
   late final _description = TextEditingController(
-    text: '${widget.group?['description'] ?? ''}',
+    text: '${_group?['description'] ?? ''}',
   );
-  late final _features = objectMap(widget.group?['features']);
+  late final _features = objectMap(_group?['features']);
   late final Map<String, TextEditingController> _limits =
       <String, TextEditingController>{
         for (final key in widget.definition['limits']! as List)
           '$key': TextEditingController(
-            text: '${objectMap(widget.group?['limits'])[key] ?? 0}',
+            text: '${objectMap(_group?['limits'])[key] ?? 0}',
           ),
       };
   late final Set<String> _delegable =
-      (widget.group?['delegablePermissions'] as List? ?? <Object?>[])
+      (_group?['delegablePermissions'] as List? ?? <Object?>[])
           .cast<String>()
           .toSet();
   late final Map<String, Set<String>> _roles = <String, Set<String>>{
     for (final role in <String>['manager', 'member', 'viewer'])
       role:
-          (objectMap(widget.group?['rolePermissions'])[role] as List? ??
-                  <Object?>[])
+          (objectMap(_group?['rolePermissions'])[role] as List? ?? <Object?>[])
               .cast<String>()
               .toSet(),
   };
-  bool get _readOnly => widget.group?['protected'] == true;
+  bool get _readOnly => _group?['protected'] == true;
   var _saving = false;
   String? _error;
 
@@ -207,7 +205,7 @@ class _GroupEditorState extends State<GroupEditor> {
     });
     try {
       await widget.repository.save(<String, Object?>{
-        ...?widget.group,
+        ...?_group,
         'scope': widget.scope,
         'name': _name.text.trim(),
         'description': _description.text.trim(),
@@ -228,6 +226,43 @@ class _GroupEditorState extends State<GroupEditor> {
       });
       if (mounted) Navigator.pop(context, true);
     } on Object catch (error) {
+      if (error is ApiException && error.isConflict && _group != null) {
+        try {
+          final groups = await widget.repository.groups(widget.scope);
+          final current = groups
+              .where((value) => value['id'] == _group!['id'])
+              .firstOrNull;
+          if (current != null && mounted) {
+            _group = current;
+            _name.text = '${current['name']}';
+            _description.text = '${current['description'] ?? ''}';
+            _features
+              ..clear()
+              ..addAll(objectMap(current['features']));
+            for (final entry in _limits.entries) {
+              entry.value.text =
+                  '${objectMap(current['limits'])[entry.key] ?? 0}';
+            }
+            _delegable
+              ..clear()
+              ..addAll(
+                (current['delegablePermissions'] as List? ?? <Object?>[])
+                    .cast<String>(),
+              );
+            for (final entry in _roles.entries) {
+              entry.value
+                ..clear()
+                ..addAll(
+                  (objectMap(current['rolePermissions'])[entry.key] as List? ??
+                          <Object?>[])
+                      .cast<String>(),
+                );
+            }
+          }
+        } on Object {
+          // The conflict is still shown; the caller can close and reload.
+        }
+      }
       if (mounted) {
         setState(() {
           _saving = false;
@@ -244,9 +279,9 @@ class _GroupEditorState extends State<GroupEditor> {
     title: Text(
       _readOnly
           ? 'System owner permissions'
-          : widget.group == null
+          : _group == null
           ? 'Create ${widget.scope} group'
-          : 'Edit ${widget.group!['name']}',
+          : 'Edit ${_group!['name']}',
     ),
     content: SizedBox(
       width: 760,

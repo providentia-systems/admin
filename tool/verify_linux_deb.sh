@@ -91,8 +91,11 @@ DESKTOP_FILE="${EXTRACTION_ROOT}/usr/share/applications/com.vastdevelopmentmetho
   echo 'Installed Admin desktop registration is missing.' >&2
   exit 66
 }
-grep -Fqx 'Exec=providentia_admin %u' "${DESKTOP_FILE}"
-grep -Fqx 'MimeType=x-scheme-handler/providentia-admin;' "${DESKTOP_FILE}"
+grep -Fqx 'Exec=providentia_admin' "${DESKTOP_FILE}"
+if grep -Eq '^MimeType=.*x-scheme-handler|^Exec=.*%[uUfF]' "${DESKTOP_FILE}"; then
+  echo 'Installed Admin must not register authentication URI handling.' >&2
+  exit 65
+fi
 
 verify_linkage "${BINARY}" "${LIBRARY_ROOT}"
 while IFS= read -r -d '' native_library; do

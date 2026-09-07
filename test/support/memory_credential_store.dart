@@ -35,6 +35,16 @@ final class MemoryCredentialStore implements CredentialStore {
       pending = Map.of(values);
 }
 
+final _fixtureSessionExpiry = DateTime.now()
+    .toUtc()
+    .add(const Duration(days: 30))
+    .toIso8601String();
+
+final _fixtureAccessExpiry = DateTime.now()
+    .toUtc()
+    .add(const Duration(hours: 1))
+    .toIso8601String();
+
 const String memoryInstallationId = '44444444-4444-4444-8444-444444444444';
 
 Map<String, String> memoryStoredSession() => <String, String>{
@@ -45,8 +55,8 @@ Map<String, String> memoryStoredSession() => <String, String>{
   'installationId': memoryInstallationId,
   'userId': '0198f4e3-7abc-7def-8abc-0123456789ab',
   'accessExpiresAt': _fixtureAccessExpiry,
-  'refreshExpiresAt': '2026-10-01T00:00:00Z',
-  'idleExpiresAt': '2026-10-01T00:00:00Z',
+  'refreshExpiresAt': _fixtureSessionExpiry,
+  'idleExpiresAt': _fixtureSessionExpiry,
   'refreshIdleTtlSeconds': '2592000',
   'transport': 'native',
 };

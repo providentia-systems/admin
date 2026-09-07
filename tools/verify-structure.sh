@@ -39,15 +39,15 @@ bash -n tools/agent-setup.sh tool/install_flutter_linux.sh \
   packaging/linux/providentia_admin packaging/linux/debian-postinst \
   packaging/linux/debian-postrm
 
-grep -Fqx 'Exec=providentia_admin %u' \
+grep -Fqx 'Exec=providentia_admin' \
   packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
-grep -Fqx 'MimeType=x-scheme-handler/providentia-admin;' \
-  packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
-grep -Fq 'G_APPLICATION_HANDLES_OPEN' linux/runner/my_application.cc
-grep -Fq 'providentia-admin://login-link/admin#' \
-  linux/runner/my_application.cc
-test "$(grep -Fc 'dispatch_pending_link(self);' linux/runner/my_application.cc)" = 2
-grep -Fq 'clear_pending_link(self);' linux/runner/my_application.cc
+if grep -En 'x-scheme-handler|%[uUfF]' \
+  packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop \
+  || grep -En 'G_APPLICATION_HANDLES_OPEN|application_links|pending_link|login-link' \
+    linux/runner/my_application.cc; then
+  echo 'Admin must not retain the retired authentication URI handler.' >&2
+  exit 1
+fi
 grep -Fq 'set(CMAKE_DISABLE_FIND_PACKAGE_JNI TRUE CACHE BOOL' \
   linux/CMakeLists.txt
 grep -Fq 'path_provider_android: 2.2.23' pubspec.yaml
@@ -66,8 +66,7 @@ grep -Fq 'PRODUCTION_API_BASE_URL' .github/workflows/release-linux.yml
 grep -Fq 'LINUX_SIGNING_KEY_BASE64' .github/workflows/release-linux.yml
 grep -Fq "PROVIDENTIA_LINUX_LAUNCH_SMOKE: 'true'" \
   .github/workflows/quality.yml .github/workflows/release-linux.yml
-grep -Fq 'ADMIN_APP_LINK_BASE=providentia-admin://login-link/admin' \
-  docs/development/agent-environment.md
+grep -Fq 'eight-digit email code' docs/development/agent-environment.md
 
 for forbidden in android ios macos web windows; do
   if [ -d "${forbidden}" ]; then
@@ -95,12 +94,14 @@ for forbidden in ai_integration catalog_sharing data_governance homes inventory 
   fi
 done
 
-if grep -En '^[[:space:]]+(camera|drift|drift_flutter|file_picker|image_picker|sqlite3):' pubspec.yaml; then
+# file_picker selects a profile avatar for a bounded API upload; it does not
+# add household capture or inventory persistence to Admin.
+if grep -En '^[[:space:]]+(camera|drift|drift_flutter|image_picker|sqlite3):' pubspec.yaml; then
   echo "Admin contains a forbidden homeowner/media persistence dependency." >&2
   exit 1
 fi
 
-EXPECTED="7e13d550e7a4438297766f654fadbd1e75894efac989229da6fcd0d9f7f97dda"
+EXPECTED="764f1b850a150f805eb178bf85cba802ba6b3ee35dcfbfae24a179049a7d55a7"
 ACTUAL="$(sha256sum contracts/providentia-v1.json | cut -d' ' -f1)"
 test "${ACTUAL}" = "${EXPECTED}"
 
