@@ -52,6 +52,7 @@ final class SessionController extends ChangeNotifier {
   Map<String, Object?> get profile => _profile;
   Future<void> reloadProfile() => _bootstrapAuthorization();
   int _authorizationEpoch = 0;
+  int _bootstrapGeneration = 0;
   int _sessionEpoch = 0;
   int _loginEpoch = 0;
   Future<bool>? _refreshInFlight;
@@ -59,10 +60,12 @@ final class SessionController extends ChangeNotifier {
 
   Future<T> _mutateStorage<T>(Future<T> Function() action) {
     final result = _storageTail.then((_) => action());
-    _storageTail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _storageTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
     return result;
   }
-
 
   SessionPhase get phase => _phase;
   OperatorAuthorization get authorization => _authorization;
@@ -73,18 +76,22 @@ final class SessionController extends ChangeNotifier {
   int get authorizationEpoch => _authorizationEpoch;
 
   Future<void> restore() async {
+    final loginEpoch = ++_loginEpoch;
     _phase = SessionPhase.restoring;
     _error = null;
     notifyListeners();
     try {
-      _installationId = await _credentialStore.readInstallationId();
+      final installationId = await _credentialStore.readInstallationId();
+      if (loginEpoch != _loginEpoch) return;
+      _installationId = installationId;
       if (_installationId == null || !isUuid(_installationId!)) {
         _installationId = newUuidV4();
         await _credentialStore.writeInstallationId(_installationId!);
       }
       final stored = await _credentialStore.readSession();
+      if (loginEpoch != _loginEpoch) return;
       if (stored.isEmpty) {
-        await _restorePendingLogin();
+        await _restorePendingLogin(loginEpoch);
         return;
       }
       if (!_hasAtomicSession(stored)) {
@@ -96,13 +103,20 @@ final class SessionController extends ChangeNotifier {
       _activateSession(stored);
       await _bootstrapAuthorization();
     } on Object {
-      await _purgeSession('Your administrator session must be renewed.');
+      if (loginEpoch == _loginEpoch) {
+        await _purgeSession('Your administrator session must be renewed.');
+      }
     }
   }
 
   Future<void> requestEmailCode(String email) async {
+    _clearMemory(null);
     final loginEpoch = ++_loginEpoch;
-    _error = null;
+    notifyListeners();
+    await _mutateStorage(() async {
+      if (loginEpoch == _loginEpoch) await _credentialStore.clearSession();
+    });
+    if (loginEpoch != _loginEpoch) return;
     final installationId = _installationId ?? newUuidV4();
     _installationId = installationId;
     await _credentialStore.writeInstallationId(installationId);
@@ -139,16 +153,16 @@ final class SessionController extends ChangeNotifier {
     await _mutateStorage(() async {
       if (loginEpoch != _loginEpoch) return;
       await _credentialStore.writePendingLogin(<String, String>{
-      'challengeId': challenge.challengeId,
-      'bindingToken': challenge.bindingToken,
-      'email': challenge.email,
-      'expiresAt': challenge.expiresAt.toIso8601String(),
-      'resendAt': challenge.resendAt.toIso8601String(),
-    });
-    if (loginEpoch != _loginEpoch) {
-      await _credentialStore.clearPendingLogin();
-      return;
-    }
+        'challengeId': challenge.challengeId,
+        'bindingToken': challenge.bindingToken,
+        'email': challenge.email,
+        'expiresAt': challenge.expiresAt.toIso8601String(),
+        'resendAt': challenge.resendAt.toIso8601String(),
+      });
+      if (loginEpoch != _loginEpoch) {
+        await _credentialStore.clearPendingLogin();
+        return;
+      }
     });
     if (loginEpoch != _loginEpoch) return;
     _challenge = challenge;
@@ -159,6 +173,10 @@ final class SessionController extends ChangeNotifier {
   Future<bool> verifyEmailCode(String code) async {
     final current = _challenge;
     if (current == null) return false;
+    if (!current.expiresAt.isAfter(DateTime.now().toUtc())) {
+      await _purgeSession('The email code expired. Request a new code.');
+      return false;
+    }
     if (!RegExp(r'^[0-9]{8}$').hasMatch(code)) {
       throw const FormatException('Enter the eight-digit email code.');
     }
@@ -189,9 +207,11 @@ final class SessionController extends ChangeNotifier {
       await _bootstrapAuthorization(expectedSessionEpoch: _sessionEpoch);
       return _phase == SessionPhase.authenticated;
     } on Object {
-      if (loginEpoch == _loginEpoch) await _purgeSession(
-        'The administrator session could not be established. Request a new code.',
-      );
+      if (loginEpoch == _loginEpoch) {
+        await _purgeSession(
+          'The administrator session could not be established. Request a new code.',
+        );
+      }
       rethrow;
     }
   }
@@ -208,8 +228,8 @@ final class SessionController extends ChangeNotifier {
     // Revoke local authorization before the first await. A late refresh or a
     // slow logout transport must never keep privileged widgets alive.
     _clearMemory(null);
-    final logoutEpoch = _loginEpoch;
     notifyListeners();
+    final cleanup = _clearStoredCredentialMaterial();
     try {
       await _api.postPublic(
         '/api/v1/auth/logout',
@@ -220,7 +240,7 @@ final class SessionController extends ChangeNotifier {
     } on Object {
       // Local credential destruction does not depend on network success.
     } finally {
-      if (logoutEpoch == _loginEpoch) await _clearStoredCredentialMaterial();
+      await cleanup;
     }
   }
 
@@ -316,8 +336,13 @@ final class SessionController extends ChangeNotifier {
 
   Future<void> _bootstrapAuthorization({int? expectedSessionEpoch}) async {
     final epoch = expectedSessionEpoch ?? _sessionEpoch;
+    final generation = ++_bootstrapGeneration;
     final response = await _api.get('/api/v1/me');
-    if (epoch != _sessionEpoch || _accessToken == null) return;
+    if (epoch != _sessionEpoch ||
+        generation != _bootstrapGeneration ||
+        _accessToken == null) {
+      return;
+    }
     final json = response.jsonObject;
     final bootstrapUserId = json['userId'];
     if (bootstrapUserId is! String ||
@@ -365,9 +390,12 @@ final class SessionController extends ChangeNotifier {
         _challenge != null;
     if (hadSensitiveState) {
       _authorizationEpoch += 1;
-      _sessionEpoch += 1;
-      _loginEpoch += 1;
     }
+    // An in-flight restore or request is sensitive even before credentials are
+    // activated, so every explicit clearance invalidates asynchronous work.
+    _sessionEpoch += 1;
+    _loginEpoch += 1;
+    _bootstrapGeneration += 1;
     _profile = const <String, Object?>{};
     _accessToken = null;
     _refreshToken = null;
@@ -384,13 +412,8 @@ final class SessionController extends ChangeNotifier {
     _error = message;
   }
 
-  Future<bool> _clearStoredCredentialMaterial() {
-    final epoch = _loginEpoch;
-    return _mutateStorage(() async {
-      if (epoch != _loginEpoch) return true;
-      return _clearStoredCredentialMaterialInsideWrite();
-    });
-  }
+  Future<bool> _clearStoredCredentialMaterial() =>
+      _mutateStorage(_clearStoredCredentialMaterialInsideWrite);
 
   Future<bool> _clearStoredCredentialMaterialInsideWrite() async {
     var cleared = true;
@@ -411,8 +434,9 @@ final class SessionController extends ChangeNotifier {
     return cleared;
   }
 
-  Future<void> _restorePendingLogin() async {
+  Future<void> _restorePendingLogin(int expectedLoginEpoch) async {
     final values = await _credentialStore.readPendingLogin();
+    if (expectedLoginEpoch != _loginEpoch) return;
     try {
       if (values.isEmpty) {
         _phase = SessionPhase.signedOut;
@@ -437,7 +461,12 @@ final class SessionController extends ChangeNotifier {
         _phase = SessionPhase.loginPending;
       }
     } on Object {
-      await _credentialStore.clearPendingLogin();
+      await _mutateStorage(() async {
+        if (expectedLoginEpoch == _loginEpoch) {
+          await _credentialStore.clearPendingLogin();
+        }
+      });
+      if (expectedLoginEpoch != _loginEpoch) return;
       _phase = SessionPhase.signedOut;
     }
     notifyListeners();
@@ -447,14 +476,23 @@ final class SessionController extends ChangeNotifier {
     Map<String, Object?> credentials, {
     required int expectedLoginEpoch,
     required EmailCodeChallenge expectedChallenge,
-  }) => _mutateStorage(() => _establishSessionInsideWrite(credentials, expectedLoginEpoch: expectedLoginEpoch, expectedChallenge: expectedChallenge));
+  }) => _mutateStorage(
+    () => _establishSessionInsideWrite(
+      credentials,
+      expectedLoginEpoch: expectedLoginEpoch,
+      expectedChallenge: expectedChallenge,
+    ),
+  );
 
   Future<bool> _establishSessionInsideWrite(
     Map<String, Object?> credentials, {
     required int expectedLoginEpoch,
     required EmailCodeChallenge expectedChallenge,
   }) async {
-    if (expectedLoginEpoch != _loginEpoch || !identical(expectedChallenge, _challenge)) return false;
+    if (expectedLoginEpoch != _loginEpoch ||
+        !identical(expectedChallenge, _challenge)) {
+      return false;
+    }
     final values = _credentialValues(credentials);
     _validateSession(values);
     await _credentialStore.writeSession(values);

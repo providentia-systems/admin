@@ -48,6 +48,7 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
   void dispose() {
     _name.dispose();
     _timezone.dispose();
+    _avatar?.fillRange(0, _avatar!.length, 0);
     super.dispose();
   }
 
@@ -187,6 +188,7 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
       await widget.onChanged();
       if (mounted && !widget.onboarding) await _load();
     } on Object catch (error) {
+      if (error is ProfileFailure && error.isConflict && mounted) await _load();
       if (mounted) {
         setState(() {
           _busy = false;

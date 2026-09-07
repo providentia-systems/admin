@@ -8,37 +8,45 @@ Providentia home-stock platform. Its first supported target is Linux desktop;
 there are deliberately no Android, iOS, macOS, web or Windows runners in this
 repository.
 
-The application uses the backend's native login-link authentication protocol
-and an Admin-specific installation, device, session and Linux keyring namespace.
-Linux registers `providentia-admin://` as an application-owned URI scheme. A
-login approval credential arrives only in the URI fragment, is decoded into an
-ephemeral buffer, and is overwritten immediately after approve, deny or error.
-Approval review and decision use JSON API routes; Admin never renders a backend
-HTML login page. Rotating refresh credentials are persisted atomically, shared
-by one in-flight refresh, and never activated in memory if keyring storage fails.
-The production backend must set
-`ADMIN_APP_LINK_BASE=providentia-admin://login-link/admin`. That exact
-Linux-owned base is distinct from homeowner links; an HTTPS web-auth base is
-not an Admin application link and is rejected.
+Sign in by entering an email address and the eight-digit code delivered to that
+mailbox. The backend sends the email; the client verifies the code using the
+requesting installation's secret binding proof. Codes expire after ten minutes,
+allow at most five incorrect attempts and have a sixty-second resend cooldown.
+The application has its own installation, device, session and Linux keyring
+namespace. Rotating refresh credentials are persisted atomically and are never
+activated in memory if keyring storage fails.
 
-Backend platform roles select the available workspaces:
+Authorization comes from backend-managed administrator groups. The initial
+system owner is authorized using `php bin/providentia system:owner EMAIL` in the
+backend. This does not bypass email verification. Other administrator sign-ins
+create an approval request; an authorized administrator selects their group and
+approves access. The protected system-owner group has all administrator rights.
+Other groups grant only their configured capabilities, including separate rights
+for approving administrators, managing groups, inspecting people and homes,
+maintaining catalog data, configuring countries and viewing audit events.
 
-- platform administrators inspect privacy-safe account and home-membership
-  summaries, activate or suspend accounts, close accounts permanently, and
-  grant or revoke platform roles;
-- catalog reviewers approve or reject sanitized, consent-bound proposals and
-  contributions, including typed store-price facts with no contributor or home
-  attribution;
-- catalog curators link approved facts to the ordinary proposal pipeline and
-  publish only server-sanitized, digest-verified product images;
-- billing operators can inspect the billing control plane. Enforcement remains
-  disabled during the free stabilization phase (`BILLING_ENABLED=0`).
+Authorized operators can inspect household products, categories, quantities and
+other application records through dedicated `/api/v1/admin/` routes. This access
+is independent of public catalog sharing and is audited by the backend. Public
+sharing still means contributing catalog metadata for use by other homes; it does
+not publish household quantities or grant access to another home's inventory.
+The household client remains isolated by home membership. Admin never displays
+session proofs, provider credentials or other stored secrets.
 
-Admin never exposes household stock, counts, receipts, purchases, household
-locations, private prices, notes, reports, contributor identity, private AI
-media, provider credentials or full backend access. Reviewers may see only the
-Backend's sanitized, attribution-free store-price projection when sharing
-consent is active. Owner-only bootstrap/recovery stays in the backend CLI.
+The access workspace manages separate account, home and administrator groups.
+Each subject has one group in its scope. Account groups govern home ownership;
+home groups govern features, quotas, role defaults and the permissions an owner
+may delegate. Reducing a quota preserves existing records and blocks additions
+over the new limit. Disabling an operation removes permission to perform it.
+
+Country settings select starter groups, currency, timezone and a versioned
+privacy agreement. Namibia is the only initially published country. The reference
+data workspace requests backend updates from the official countries, states and
+cities source. Profiles support names, verified email aliases, an opt-in Gravatar
+or a cropped uploaded avatar. A verified primary email must always remain.
+
+Billing enforcement and paid platform AI are future work. Manual group assignment
+is available now; no payment or AI charge is required for the current rollout.
 
 ## Start development
 
@@ -71,8 +79,8 @@ Linux signing credentials are present.
 - Moderation previews require WebP, `Cache-Control: no-store`, bounded bytes and
   a matching `X-Content-SHA256`; preview buffers are overwritten on disposal.
 - Secrets never enter source, logs, analytics or the homeowner-client keyring.
-- Admin rejects homeowner application links, non-Admin session bindings and
-  every household API route before privileged state can be displayed.
+- Admin rejects non-Admin session bindings and household-client API routes.
+  Operator inspection uses the separate backend-authorized administrator API.
 
 ## License
 

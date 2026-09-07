@@ -179,7 +179,8 @@ class _PlatformAdministratorsPageState
                     ),
                     trailing:
                         admin['user_id'] == widget.session.userId ||
-                            (admin['systemOwner'] == true || admin['systemOwner'] == 1)
+                            (admin['systemOwner'] == true ||
+                                admin['systemOwner'] == 1)
                         ? const Icon(Icons.lock_outline)
                         : Wrap(
                             spacing: 8,

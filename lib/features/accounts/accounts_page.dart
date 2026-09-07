@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/session_controller.dart';
 import '../access/access_groups_page.dart';
+import '../workspace/operator_image.dart';
 import 'account_models.dart';
 import 'account_repository.dart';
 
@@ -166,6 +167,10 @@ class _AccountsPageState extends State<AccountsPage> {
                         )
                       : _AccountDetail(
                           account: _selected!,
+                          api: widget.api,
+                          canReadPeople: widget.session.authorization.has(
+                            'people.read',
+                          ),
                           onStatus:
                               widget.session.authorization.has(
                                 'accounts.manage',
@@ -265,40 +270,10 @@ class _AccountsPageState extends State<AccountsPage> {
     }
   }
 
-  Future<String?> _reasonDialog({required String title}) async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            labelText: 'Auditable reason (at least 5 characters)',
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (controller.text.trim().length >= 5) {
-                Navigator.pop(context, controller.text.trim());
-              }
-            },
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return result;
-  }
+  Future<String?> _reasonDialog({required String title}) => showDialog<String>(
+    context: context,
+    builder: (_) => _ReasonDialog(title: title),
+  );
 
   void _snack(String message) => ScaffoldMessenger.of(
     context,
@@ -352,11 +327,15 @@ final class _AccountList extends StatelessWidget {
 final class _AccountDetail extends StatelessWidget {
   const _AccountDetail({
     required this.account,
+    required this.api,
+    required this.canReadPeople,
     required this.onStatus,
     required this.onAssignGroup,
   });
 
   final OperatorAccount account;
+  final AdminApi api;
+  final bool canReadPeople;
   final ValueChanged<String>? onStatus;
   final VoidCallback? onAssignGroup;
 
@@ -364,6 +343,17 @@ final class _AccountDetail extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(20),
     children: <Widget>[
+      if (canReadPeople)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OperatorImage(
+            api: api,
+            path:
+                '/api/v1/admin/users/${Uri.encodeComponent(account.userId)}/avatar',
+            label: 'Account avatar',
+            placeholder: Icons.person_outline,
+          ),
+        ),
       Text(
         account.displayName.isEmpty ? account.email : account.displayName,
         style: Theme.of(context).textTheme.titleLarge,
@@ -449,5 +439,49 @@ final class _ErrorBanner extends StatelessWidget {
       color: Theme.of(context).colorScheme.error,
     ),
     actions: <Widget>[TextButton(onPressed: retry, child: const Text('Retry'))],
+  );
+}
+
+final class _ReasonDialog extends StatefulWidget {
+  const _ReasonDialog({required this.title});
+  final String title;
+  @override
+  State<_ReasonDialog> createState() => _ReasonDialogState();
+}
+
+class _ReasonDialogState extends State<_ReasonDialog> {
+  final _controller = TextEditingController();
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      minLines: 2,
+      maxLines: 4,
+      decoration: const InputDecoration(
+        labelText: 'Auditable reason (at least 5 characters)',
+      ),
+    ),
+    actions: <Widget>[
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () {
+          if (_controller.text.trim().length >= 5) {
+            Navigator.pop(context, _controller.text.trim());
+          }
+        },
+        child: const Text('Confirm'),
+      ),
+    ],
   );
 }

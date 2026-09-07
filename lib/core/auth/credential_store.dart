@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 abstract interface class CredentialStore {
@@ -35,50 +37,48 @@ final class SecureCredentialStore implements CredentialStore {
     'transport',
   ];
   static const _pendingKeys = <String>[
-    'requestId',
-    'pollToken',
-    'codeVerifier',
-    'state',
+    'challengeId',
+    'bindingToken',
+    'email',
     'expiresAt',
-    'pollIntervalSeconds',
+    'resendAt',
   ];
 
   @override
-  Future<void> clearSession() async {
-    for (final key in _sessionKeys) {
-      await _storage.delete(key: '$_prefix$key');
-    }
-  }
+  Future<void> clearSession() => _storage.delete(key: '${_prefix}session');
 
   @override
-  Future<void> clearPendingLogin() async {
-    for (final key in _pendingKeys) {
-      await _storage.delete(key: '${_prefix}pending.$key');
-    }
-  }
+  Future<void> clearPendingLogin() =>
+      _storage.delete(key: '${_prefix}pendingLogin');
 
   @override
   Future<String?> readInstallationId() =>
       _storage.read(key: '${_prefix}installationId');
 
   @override
-  Future<Map<String, String>> readSession() async {
-    final result = <String, String>{};
-    for (final key in _sessionKeys) {
-      final value = await _storage.read(key: '$_prefix$key');
-      if (value != null) result[key] = value;
-    }
-    return result;
-  }
+  Future<Map<String, String>> readSession() =>
+      _readEnvelope('session', _sessionKeys);
 
   @override
-  Future<Map<String, String>> readPendingLogin() async {
-    final result = <String, String>{};
-    for (final key in _pendingKeys) {
-      final value = await _storage.read(key: '${_prefix}pending.$key');
-      if (value != null) result[key] = value;
+  Future<Map<String, String>> readPendingLogin() =>
+      _readEnvelope('pendingLogin', _pendingKeys);
+
+  Future<Map<String, String>> _readEnvelope(
+    String name,
+    List<String> allowed,
+  ) async {
+    final stored = await _storage.read(key: '$_prefix$name');
+    if (stored == null) return <String, String>{};
+    final decoded = jsonDecode(stored);
+    if (decoded is! Map<String, Object?> ||
+        decoded.values.any((value) => value is! String)) {
+      throw const FormatException('Stored credential envelope is malformed.');
     }
-    return result;
+    return <String, String>{
+      for (final entry in decoded.entries)
+        if (allowed.contains(entry.key) && (entry.value! as String).isNotEmpty)
+          entry.key: entry.value! as String,
+    };
   }
 
   @override
@@ -86,25 +86,23 @@ final class SecureCredentialStore implements CredentialStore {
       _storage.write(key: '${_prefix}installationId', value: value);
 
   @override
-  Future<void> writeSession(Map<String, String> values) async {
-    await clearSession();
-    for (final entry in values.entries) {
-      if (_sessionKeys.contains(entry.key) && entry.value.isNotEmpty) {
-        await _storage.write(key: '$_prefix${entry.key}', value: entry.value);
-      }
-    }
-  }
+  Future<void> writeSession(Map<String, String> values) =>
+      _writeEnvelope('session', values, _sessionKeys);
 
   @override
-  Future<void> writePendingLogin(Map<String, String> values) async {
-    await clearPendingLogin();
-    for (final entry in values.entries) {
-      if (_pendingKeys.contains(entry.key)) {
-        await _storage.write(
-          key: '${_prefix}pending.${entry.key}',
-          value: entry.value,
-        );
-      }
-    }
-  }
+  Future<void> writePendingLogin(Map<String, String> values) =>
+      _writeEnvelope('pendingLogin', values, _pendingKeys);
+
+  Future<void> _writeEnvelope(
+    String name,
+    Map<String, String> values,
+    List<String> allowed,
+  ) => _storage.write(
+    key: '$_prefix$name',
+    value: jsonEncode(<String, String>{
+      for (final entry in values.entries)
+        if (allowed.contains(entry.key) && entry.value.isNotEmpty)
+          entry.key: entry.value,
+    }),
+  );
 }

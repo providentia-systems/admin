@@ -25,8 +25,10 @@ Uint8List? profileBytes(Object? value) => value is Uint8List
     : null;
 
 final class ProfileFailure implements Exception {
-  const ProfileFailure(this.message);
+  const ProfileFailure(this.message, {this.statusCode});
   final String message;
+  final int? statusCode;
+  bool get isConflict => statusCode == 409;
   @override
   String toString() => message;
 }

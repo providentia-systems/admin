@@ -39,16 +39,15 @@ void main() {
     late String requestId;
     final api = FakeApi((request) async {
       if (request.path == '/api/v1/auth/email-codes') {
-        requestId =
-            '11111111-1111-4111-8111-111111111111';
+        requestId = '11111111-1111-4111-8111-111111111111';
         return jsonResponse(<String, Object?>{
-          'accepted': true,
-          'requestId': requestId,
+          'challengeId': requestId,
+          'bindingToken': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'resendAfterSeconds': 60,
           'expiresAt': DateTime.now()
               .toUtc()
               .add(const Duration(minutes: 10))
               .toIso8601String(),
-          'pollIntervalSeconds': 2,
         });
       }
       if (request.path.endsWith('/status')) {
@@ -115,7 +114,12 @@ void main() {
     await tester.tap(find.text('Email me a code'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sign-in could not be completed. Check your code and connection, then try again.'), findsOneWidget);
+    expect(
+      find.text(
+        'Sign-in could not be completed. Check your code and connection, then try again.',
+      ),
+      findsOneWidget,
+    );
     expect(find.textContaining('transport detail'), findsNothing);
     expect(session.phase, SessionPhase.signedOut);
   });

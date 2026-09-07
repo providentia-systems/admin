@@ -1,7 +1,6 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
-#include <cstring>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -10,41 +9,21 @@
 
 struct _MyApplication {
   GtkApplication parent_instance;
-  FlMethodChannel* link_channel;
-  gchar* pending_link;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
-static void clear_pending_link(MyApplication* self) {
-  if (self->pending_link == nullptr) return;
-  volatile gchar* cursor = self->pending_link;
-  const size_t length = std::strlen(self->pending_link);
-  for (size_t index = 0; index < length; index += 1) cursor[index] = 0;
-  g_clear_pointer(&self->pending_link, g_free);
-}
-
-static void dispatch_pending_link(MyApplication* self) {
-  if (self->link_channel == nullptr || self->pending_link == nullptr) return;
-  g_autoptr(FlValue) value = fl_value_new_string(self->pending_link);
-  fl_method_channel_invoke_method(self->link_channel, "open", value, nullptr,
-                                  nullptr, nullptr);
-  clear_pending_link(self);
-}
-
 // Called when first Flutter frame received.
-static void first_frame_cb(MyApplication* self, FlView* view) {
+static void first_frame_cb(FlView* view, gpointer user_data) {
+  (void)user_data;
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
-  dispatch_pending_link(self);
 }
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
-  MyApplication* self = MY_APPLICATION(application);
   GList* windows = gtk_application_get_windows(GTK_APPLICATION(application));
   if (windows != nullptr) {
     gtk_window_present(GTK_WINDOW(windows->data));
-    dispatch_pending_link(self);
     return;
   }
   GtkWindow* window =
@@ -82,11 +61,6 @@ static void my_application_activate(GApplication* application) {
   g_autoptr(FlDartProject) project = fl_dart_project_new();
 
   FlView* view = fl_view_new(project);
-  FlBinaryMessenger* messenger =
-      fl_engine_get_binary_messenger(fl_view_get_engine(view));
-  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
-  self->link_channel = fl_method_channel_new(
-      messenger, "providentia.admin.application_links", FL_METHOD_CODEC(codec));
   GdkRGBA background_color;
   // Background defaults to black, override it here if necessary, e.g. #00000000
   // for transparent.
@@ -97,32 +71,12 @@ static void my_application_activate(GApplication* application) {
 
   // Show the window when Flutter renders.
   // Requires the view to be realized so we can start rendering.
-  g_signal_connect_swapped(view, "first-frame", G_CALLBACK(first_frame_cb),
-                           self);
+  g_signal_connect(view, "first-frame", G_CALLBACK(first_frame_cb), nullptr);
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
-}
-
-// Implements GApplication::open. A secondary process forwards links to the
-// unique primary instance; the fragment is never logged or persisted.
-static void my_application_open(GApplication* application, GFile** files,
-                                gint file_count, const gchar* hint) {
-  (void)hint;
-  MyApplication* self = MY_APPLICATION(application);
-  for (gint index = 0; index < file_count; index += 1) {
-    g_autofree gchar* uri = g_file_get_uri(files[index]);
-    if (uri == nullptr ||
-        !g_str_has_prefix(uri, "providentia-admin://login-link/admin#")) {
-      continue;
-    }
-    clear_pending_link(self);
-    self->pending_link = g_strdup(uri);
-    break;
-  }
-  g_application_activate(application);
 }
 
 // Implements GApplication::startup.
@@ -143,20 +97,10 @@ static void my_application_shutdown(GApplication* application) {
   G_APPLICATION_CLASS(my_application_parent_class)->shutdown(application);
 }
 
-// Implements GObject::dispose.
-static void my_application_dispose(GObject* object) {
-  MyApplication* self = MY_APPLICATION(object);
-  clear_pending_link(self);
-  g_clear_object(&self->link_channel);
-  G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
-}
-
 static void my_application_class_init(MyApplicationClass* klass) {
   G_APPLICATION_CLASS(klass)->activate = my_application_activate;
-  G_APPLICATION_CLASS(klass)->open = my_application_open;
   G_APPLICATION_CLASS(klass)->startup = my_application_startup;
   G_APPLICATION_CLASS(klass)->shutdown = my_application_shutdown;
-  G_OBJECT_CLASS(klass)->dispose = my_application_dispose;
 }
 
 static void my_application_init(MyApplication* self) {}
@@ -170,5 +114,5 @@ MyApplication* my_application_new() {
 
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_HANDLES_OPEN, nullptr));
+                                     G_APPLICATION_DEFAULT_FLAGS, nullptr));
 }

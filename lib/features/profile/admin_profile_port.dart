@@ -29,6 +29,7 @@ final class AdminProfilePort implements ProfilePort {
         'GET' => await api.get(endpoint, query: query),
         'POST' => await api.post(endpoint, body: body, query: query),
         'PUT' => await api.put(endpoint, body: body),
+        'PATCH' => await api.patch(endpoint, body: body),
         'DELETE' => await api.delete(endpoint, body: body),
         _ => throw const ProfileFailure(
           'The profile operation is unavailable.',
@@ -39,7 +40,7 @@ final class AdminProfilePort implements ProfilePort {
       }
       return response.jsonBody;
     } on ApiException catch (error) {
-      throw ProfileFailure(error.message);
+      throw ProfileFailure(error.message, statusCode: error.statusCode);
     }
   }
 }

@@ -32,8 +32,7 @@ EOF
 [Desktop Entry]
 Type=Application
 Name=Providentia Admin
-Exec=providentia_admin %u
-MimeType=x-scheme-handler/providentia-admin;
+Exec=providentia_admin
 EOF
 }
 
@@ -51,6 +50,19 @@ make_fixture "${GOOD_ROOT}" 'libegl1, libgles2, libgtk-3-0, libsecret-1-0'
 dpkg-deb --root-owner-group --build "${GOOD_ROOT}" "${FIXTURE_ROOT}/good.deb" >/dev/null
 PATH="${FIXTURE_ROOT}/bin:${PATH}" \
   bash "${ROOT}/tool/verify_linux_deb.sh" "${FIXTURE_ROOT}/good.deb" >/dev/null
+
+URI_ROOT="${FIXTURE_ROOT}/retired-uri"
+make_fixture "${URI_ROOT}" 'libegl1, libgles2, libgtk-3-0, libsecret-1-0'
+cat >> "${URI_ROOT}/usr/share/applications/com.vastdevelopmentmethod.providentia.admin.desktop" <<'EOF'
+MimeType=x-scheme-handler/providentia-admin;
+EOF
+dpkg-deb --root-owner-group --build "${URI_ROOT}" "${FIXTURE_ROOT}/retired-uri.deb" >/dev/null
+if PATH="${FIXTURE_ROOT}/bin:${PATH}" \
+  bash "${ROOT}/tool/verify_linux_deb.sh" "${FIXTURE_ROOT}/retired-uri.deb" \
+  >/dev/null 2>&1; then
+  echo 'Verifier accepted the retired authentication URI registration.' >&2
+  exit 1
+fi
 
 BAD_ROOT="${FIXTURE_ROOT}/bad"
 make_fixture "${BAD_ROOT}" 'libegl1, libgtk-3-0, libsecret-1-0'
@@ -78,4 +90,4 @@ if env -u LINUX_SIGNING_KEY_BASE64 -u LINUX_SIGNING_KEY_ID \
   exit 1
 fi
 
-echo 'Linux release scripts reject missing runtimes, unsafe versions and unsigned publication.'
+echo 'Linux release scripts reject retired authentication URIs, missing runtimes, unsafe versions and unsigned publication.'
