@@ -8,6 +8,7 @@ import test from 'node:test';
 
 const root = resolve(import.meta.dirname, '..');
 const script = resolve(root, 'tools', 'providentia-admin.sh');
+const setupGuide = resolve(root, 'docs', 'setup-ubuntu.md');
 
 function run(...arguments_) {
   return spawnSync('bash', [script, ...arguments_], {
@@ -75,4 +76,30 @@ test('build uses pinned repository bootstrap and the Admin desktop binary', () =
   assert.match(source, /normal D-Bus keyring session/);
   assert.doesNotMatch(source, /MYSQL_PASSWORD|MARIADB_PASSWORD|DATABASE_URL/);
   assert.doesNotMatch(source, /OPENAI_API_KEY|ANTHROPIC_API_KEY/);
+});
+
+test('setup guide uses the released backend container and safe UFW ordering', () => {
+  const guide = readFileSync(setupGuide, 'utf8');
+  const sshRule = guide.indexOf(
+    'sudo ufw allow from YOUR_ADMIN_PUBLIC_IP to any port 22 proto tcp',
+  );
+  const secondSession = guide.indexOf('second independent SSH session');
+  const defaultPolicy = guide.indexOf('sudo ufw default deny incoming');
+  const enableFirewall = guide.indexOf('sudo ufw enable');
+
+  assert.ok(sshRule >= 0, 'missing restricted SSH rule');
+  assert.ok(secondSession > sshRule, 'second-session check must follow SSH rule');
+  assert.ok(
+    defaultPolicy > secondSession,
+    'default policy must follow the second-session check',
+  );
+  assert.ok(
+    enableFirewall > defaultPolicy,
+    'UFW enablement must follow safe rule preparation',
+  );
+  assert.match(
+    guide,
+    /docker compose --env-file \/etc\/providentia\/production\.env[\s\S]*exec -T api php bin\/providentia system:owner/,
+  );
+  assert.doesNotMatch(guide, /^php bin\/providentia system:owner/m);
 });

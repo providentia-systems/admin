@@ -207,7 +207,7 @@ void main() {
     },
   );
   testWidgets(
-    'selected locations save, reopen with names, and remain clearable',
+    'selected locations and city-only clearing survive save and reopen',
     (tester) async {
       final port = _ProfilePort();
       await _pump(tester, port);
@@ -246,6 +246,35 @@ void main() {
       );
       expect(find.text('Khomas'), findsOneWidget);
       expect(find.text('Windhoek'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Clear city'));
+      await tester.pumpAndSettle();
+      expect(find.text('Khomas'), findsOneWidget);
+      expect(find.text('Windhoek'), findsNothing);
+      expect(find.text('Not selected'), findsOneWidget);
+      await tester.ensureVisible(find.text('Save profile'));
+      await tester.tap(find.text('Save profile'));
+      await tester.pumpAndSettle();
+      expect(
+        port.calls
+            .where((call) => call.operation == 'updateAccountProfile')
+            .last
+            .body,
+        containsPair('stateId', 1),
+      );
+      expect(
+        port.calls
+            .where((call) => call.operation == 'updateAccountProfile')
+            .last
+            .body,
+        containsPair('cityId', null),
+      );
+      expect(
+        port.calls.where((call) => call.operation == 'getAccountProfile'),
+        hasLength(3),
+      );
+      expect(find.text('Khomas'), findsOneWidget);
+      expect(find.text('Not selected'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Clear region'));
       await tester.pumpAndSettle();
