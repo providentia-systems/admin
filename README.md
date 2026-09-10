@@ -50,6 +50,23 @@ is available now; no payment or AI charge is required for the current rollout.
 
 ## Start development
 
+For a guided Ubuntu setup that prompts for the public server address, validates
+it, installs the pinned toolchain, builds and launches the correct Admin binary:
+
+```bash
+git clone https://github.com/providentia-systems/admin.git
+cd admin
+bash tools/providentia-admin.sh
+```
+
+See the [Ubuntu setup guide](docs/setup-ubuntu.md) for non-interactive use,
+server ports, firewall/CORS boundaries, first-owner sign-in, AI separation,
+updates and troubleshooting. The script accepts only the public backend origin;
+it never asks for database, server-shell or AI-provider credentials. Production
+persistence is MySQL/MariaDB, not PostgreSQL.
+
+For contributor development and the full validation lane:
+
 ```bash
 bash tools/agent-setup.sh
 source .agent-env
@@ -57,7 +74,8 @@ flutter run -d linux \
   --dart-define=PROVIDENTIA_API_BASE_URL=http://localhost:8080
 ```
 
-See [the agent environment guide](docs/development/agent-environment.md) for the
+See [the documentation index](docs/index.md) and
+[the agent environment guide](docs/development/agent-environment.md) for the
 pinned toolchain, host dependencies, network allowlist and complete validation
 lane. The canonical backend contract is checksum-pinned under
 `contracts/source/` and materialized only for validation and generation.

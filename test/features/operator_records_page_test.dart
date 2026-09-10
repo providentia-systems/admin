@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:providentia_admin/app/admin_layout.dart';
+import 'package:providentia_admin/app/theme.dart';
 import 'package:providentia_admin/core/api/api_client.dart';
 import 'package:providentia_admin/core/auth/operator_authorization.dart';
 import 'package:providentia_admin/features/workspace/operator_image.dart';
@@ -24,6 +26,90 @@ ApiResponse _image(
   bytes: bytes,
 );
 void main() {
+  test(
+    'identifier columns include snake/camel IDs without false positives',
+    () {
+      expect(isAdminIdentifierColumn('id'), isTrue);
+      expect(isAdminIdentifierColumn('subject_id'), isTrue);
+      expect(isAdminIdentifierColumn('homeId'), isTrue);
+      expect(isAdminIdentifierColumn('paid'), isFalse);
+      expect(isAdminIdentifierColumn('valid'), isFalse);
+    },
+  );
+
+  for (final size in <Size>[const Size(720, 700), const Size(1440, 900)]) {
+    testWidgets(
+      'operator table exposes complete identifiers and horizontal navigation at ${size.width.toInt()}px',
+      (tester) async {
+        const completeId =
+            '018f47ec-49f8-7c70-9f9b-1234567890ab-complete-identifier';
+        final api = FakeApi(
+          (_) async => jsonResponse({
+            'data': [
+              {
+                'id': completeId,
+                'subject_id': '018f47ec-49f8-7c70-9f9b-fedcba098765-subject',
+                'action': 'group.assigned',
+                'actor': 'operator@example.test',
+                'country': 'Namibia',
+                'scope': 'home',
+                'revision': 42,
+                'occurred_at': '2026-09-10T00:00:00Z',
+                'metadata': {
+                  'safe': true,
+                  'reason': 'Regression coverage for wide operator tables',
+                },
+              },
+            ],
+          }),
+        );
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildAdminTheme(),
+            home: Scaffold(
+              body: OperatorRecordsPage(
+                api: api,
+                authorization: OperatorAuthorization.fromPermissions([
+                  'audit.read',
+                ]),
+                audit: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AdminDataTableViewport), findsOneWidget);
+        expect(
+          find.text('Scroll horizontally to view every column.'),
+          findsOneWidget,
+        );
+        expect(find.text(completeId), findsOneWidget);
+        final identifierCell = tester
+            .widgetList<AdminTableCell>(find.byType(AdminTableCell))
+            .singleWhere((cell) => cell.value == completeId);
+        expect(identifierCell.identifier, isTrue);
+
+        final horizontal = tester.widget<Scrollbar>(
+          find.byKey(
+            const ValueKey<String>('admin-table-horizontal-scrollbar'),
+          ),
+        );
+        expect(horizontal.thumbVisibility, isTrue);
+        expect(horizontal.trackVisibility, isTrue);
+        expect(horizontal.controller!.position.maxScrollExtent, greaterThan(0));
+        horizontal.controller!.jumpTo(
+          horizontal.controller!.position.maxScrollExtent,
+        );
+        await tester.pump();
+        expect(horizontal.controller!.offset, greaterThan(0));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'home inspection uses operator routes and limits people collections to delegated access',
     (tester) async {

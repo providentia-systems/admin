@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../app/admin_layout.dart';
 import '../../core/api/api_client.dart';
 import 'access_repository.dart';
 
@@ -288,8 +289,7 @@ class _GroupEditorState extends State<GroupEditor> {
       child: Form(
         key: _form,
         child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: AdminFormFields(
             children: <Widget>[
               TextFormField(
                 controller: _name,
@@ -307,7 +307,6 @@ class _GroupEditorState extends State<GroupEditor> {
                 maxLines: 3,
                 decoration: const InputDecoration(labelText: 'Description'),
               ),
-              const SizedBox(height: 16),
               const Text('Features'),
               for (final rawKey in widget.definition['features']! as List)
                 CheckboxListTile(
@@ -513,8 +512,7 @@ class _AssignmentDialogState extends State<_AssignmentDialog> {
     title: Text('Assign ${widget.scope} group'),
     content: SizedBox(
       width: 480,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: AdminFormFields(
         children: <Widget>[
           if (_busy) const LinearProgressIndicator(),
           if (_groups != null)
@@ -533,7 +531,6 @@ class _AssignmentDialogState extends State<_AssignmentDialog> {
                   ? null
                   : (value) => setState(() => _selected = value),
             ),
-          const SizedBox(height: 16),
           const Text(
             'Existing records remain. The new group controls further additions and available features.',
           ),

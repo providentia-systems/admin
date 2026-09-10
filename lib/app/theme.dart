@@ -17,6 +17,13 @@ ThemeData buildAdminTheme() {
     ),
     inputDecorationTheme: const InputDecorationTheme(
       border: OutlineInputBorder(),
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      helperMaxLines: 3,
+      errorMaxLines: 3,
+    ),
+    dataTableTheme: const DataTableThemeData(
+      columnSpacing: 28,
+      horizontalMargin: 16,
     ),
   );
 }

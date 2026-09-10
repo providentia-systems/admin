@@ -6,6 +6,12 @@ actual release bundle. `tools/agent-setup.sh` is the canonical vendor-neutral,
 idempotent bootstrap. Editor- or agent-specific hooks may call it but must not
 duplicate setup logic.
 
+Operators who want a guided local build should instead start with
+[`tools/providentia-admin.sh`](../../tools/providentia-admin.sh) and the
+[Ubuntu setup guide](../setup-ubuntu.md). That wrapper validates the public API
+origin and invokes this same pinned bootstrap without carrying build-cache XDG
+settings into the user's desktop keyring session.
+
 ## Bootstrap
 
 On Ubuntu or Debian:

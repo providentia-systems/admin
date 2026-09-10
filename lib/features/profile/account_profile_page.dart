@@ -26,6 +26,8 @@ final class AccountProfilePage extends StatefulWidget {
 }
 
 class _AccountProfilePageState extends State<AccountProfilePage> {
+  static const _locationPageSize = 100;
+  static const _maximumLocationPages = 100;
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _timezone = TextEditingController();
@@ -81,6 +83,7 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
       final avatar = profile['avatarSource'] == 'upload'
           ? profileBytes(await widget.port.call('getOwnAvatar'))
           : null;
+      final locations = await _restoreSavedLocations(profile, country);
       if (!mounted) return;
       setState(() {
         _profile = profile;
@@ -92,18 +95,8 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
         _timezone.text = profile['onboardingComplete'] == true
             ? '${profile['timezone']}'
             : '${country?['defaultTimezone'] ?? 'UTC'}';
-        _state = profile['stateId'] == null
-            ? null
-            : <String, Object?>{
-                'id': profile['stateId'],
-                'name': profile['stateName'] ?? 'Region selected',
-              };
-        _city = profile['cityId'] == null
-            ? null
-            : <String, Object?>{
-                'id': profile['cityId'],
-                'name': profile['cityName'] ?? 'City selected',
-              };
+        _state = locations.$1;
+        _city = locations.$2;
         _busy = false;
       });
     } on Object catch (error) {
@@ -118,12 +111,102 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
 
   bool get _requiresAcceptance =>
       widget.onboarding || _country?['code'] != _profile?['countryCode'];
+
+  Future<(ProfileRecord?, ProfileRecord?)> _restoreSavedLocations(
+    ProfileRecord profile,
+    ProfileRecord? country,
+  ) async {
+    final countryCode = _nonBlankText(country?['code']);
+    final stateId = _locationId(profile['stateId']);
+    final cityId = _locationId(profile['cityId']);
+    var state = _savedLocation(
+      id: stateId,
+      name: _nonBlankText(profile['stateName']),
+      unavailableKind: 'region',
+    );
+    var city = _savedLocation(
+      id: cityId,
+      name: _nonBlankText(profile['cityName']),
+      unavailableKind: 'city',
+    );
+    if (countryCode == null) return (state, city);
+
+    if (stateId != null && _nonBlankText(profile['stateName']) == null) {
+      try {
+        final match = await _findSavedLocation(
+          operation: 'listCountryStates',
+          countryCode: countryCode,
+          id: stateId,
+        );
+        if (match != null) state = match;
+      } on Object {
+        // A reference-data outage must not make the rest of the profile
+        // unusable. The saved ID remains visible and can still be cleared.
+      }
+    }
+    if (cityId != null && _nonBlankText(profile['cityName']) == null) {
+      try {
+        final match = await _findSavedLocation(
+          operation: 'listCountryCities',
+          countryCode: countryCode,
+          id: cityId,
+          stateId: stateId,
+        );
+        if (match != null) city = match;
+      } on Object {
+        // See the state lookup above. Saving and clearing remain available.
+      }
+    }
+    return (state, city);
+  }
+
+  Future<ProfileRecord?> _findSavedLocation({
+    required String operation,
+    required String countryCode,
+    required int id,
+    int? stateId,
+  }) async {
+    for (var page = 0; page < _maximumLocationPages; page += 1) {
+      final records = profileRecords(
+        await widget.port.call(
+          operation,
+          path: <String, String>{'countryCode': countryCode},
+          query: <String, String>{
+            'search': '',
+            'offset': '${page * _locationPageSize}',
+            if (stateId != null) 'stateId': '$stateId',
+          },
+        ),
+      );
+      for (final record in records) {
+        if (_locationId(record['id']) == id &&
+            _nonBlankText(record['name']) != null) {
+          return record;
+        }
+      }
+      if (records.length < _locationPageSize) break;
+    }
+    return null;
+  }
+
+  ProfileRecord? _savedLocation({
+    required int? id,
+    required String? name,
+    required String unavailableKind,
+  }) => id == null
+      ? null
+      : <String, Object?>{
+          'id': id,
+          'name': name ?? 'Saved $unavailableKind unavailable (ID $id)',
+        };
+
   Future<void> _selectCountry() async {
     final country = await chooseLocation(context, widget.port);
     if (country == null || !mounted) return;
+    final countryChanged = country['code'] != _country?['code'];
     setState(() {
       _busy = true;
-      _accepted = false;
+      if (countryChanged) _accepted = false;
       _error = null;
     });
     try {
@@ -136,10 +219,14 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
       if (mounted) {
         setState(() {
           _country = country;
-          _state = null;
-          _city = null;
+          if (countryChanged) {
+            _state = null;
+            _city = null;
+          }
           _policy = policy;
-          _timezone.text = '${country['defaultTimezone']}';
+          if (countryChanged) {
+            _timezone.text = '${country['defaultTimezone']}';
+          }
           _busy = false;
         });
       }
@@ -401,8 +488,11 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
                             );
                             if (state != null && mounted) {
                               setState(() {
+                                final stateChanged =
+                                    _locationId(state['id']) !=
+                                    _locationId(_state?['id']);
                                 _state = state;
-                                _city = null;
+                                if (stateChanged) _city = null;
                               });
                             }
                           },
@@ -537,4 +627,15 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
       ),
     );
   }
+}
+
+int? _locationId(Object? value) {
+  final parsed = value is num ? value.toInt() : int.tryParse('$value');
+  return parsed != null && parsed > 0 ? parsed : null;
+}
+
+String? _nonBlankText(Object? value) {
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
 }

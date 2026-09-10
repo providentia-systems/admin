@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../app/admin_layout.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/operator_authorization.dart';
 import '../access/access_repository.dart';
@@ -372,8 +373,7 @@ class _CountryEditorState extends State<_CountryEditor> {
       child: Form(
         key: _form,
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: AdminFormFields(
             children: <Widget>[
               if (_busy) const LinearProgressIndicator(),
               if (_settings != null) ...<Widget>[
@@ -549,8 +549,7 @@ class _PolicyEditorState extends State<_PolicyEditor> {
       child: Form(
         key: _form,
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: AdminFormFields(
             children: <Widget>[
               if (_newVersion)
                 const Text(
