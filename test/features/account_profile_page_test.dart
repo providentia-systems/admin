@@ -9,10 +9,31 @@ final class _ProfilePort implements ProfilePort {
         ({
           String operation,
           Map<String, String>? path,
+          Map<String, String>? query,
           Map<String, Object?>? body,
         })
       >[];
   bool onboarding = false;
+  bool includeLocationNames = true;
+  String countryCode = 'NA';
+  int? stateId;
+  int? cityId;
+  int revision = 5;
+
+  String? get stateName => switch ((countryCode, stateId)) {
+    ('NA', 1) => 'Khomas',
+    ('NA', 3) => 'Erongo',
+    ('BW', 11) => 'South-East',
+    _ => null,
+  };
+
+  String? get cityName => switch ((countryCode, cityId)) {
+    ('NA', 2) => 'Windhoek',
+    ('NA', 4) => 'Swakopmund',
+    ('BW', 12) => 'Gaborone',
+    _ => null,
+  };
+
   @override
   Future<Object?> call(
     String operation, {
@@ -20,19 +41,29 @@ final class _ProfilePort implements ProfilePort {
     Map<String, String>? query,
     Map<String, Object?>? body,
   }) async {
-    calls.add((operation: operation, path: path, body: body));
+    calls.add((operation: operation, path: path, query: query, body: body));
+    if (operation == 'updateAccountProfile' ||
+        operation == 'completeAccountOnboarding') {
+      countryCode = '${body!['countryCode']}';
+      stateId = body['stateId'] as int?;
+      cityId = body['cityId'] as int?;
+      revision += 1;
+      return <String, Object?>{};
+    }
     return switch (operation) {
       'getAccountProfile' => {
         'displayName': 'Alex',
-        'countryCode': 'NA',
-        'stateId': null,
-        'cityId': null,
+        'countryCode': countryCode,
+        'stateId': stateId,
+        'cityId': cityId,
+        if (includeLocationNames) 'stateName': stateName,
+        if (includeLocationNames) 'cityName': cityName,
         'locale': 'en',
-        'timezone': 'Africa/Windhoek',
+        'timezone': countryCode == 'BW' ? 'Africa/Gaborone' : 'Africa/Windhoek',
         'onboardingComplete': !onboarding,
         'avatarSource': 'default',
         'avatarRevision': 2,
-        'revision': 5,
+        'revision': revision,
         'emails': [
           {'id': 'primary', 'email': 'alex@example.test', 'primary': true},
           {'id': 'other', 'email': 'other@example.test', 'primary': false},
@@ -45,24 +76,42 @@ final class _ProfilePort implements ProfilePort {
             'name': 'Namibia',
             'defaultTimezone': 'Africa/Windhoek',
           },
+          {
+            'code': 'BW',
+            'name': 'Botswana',
+            'defaultTimezone': 'Africa/Gaborone',
+          },
         ],
       },
       'getCountryPrivacyPolicy' => {
-        'id': 'policy',
+        'id': 'policy-${path!['countryCode']}',
         'title': 'Privacy notice',
         'revision': 3,
         'body':
             'Authorized operators can inspect account and home data to provide and improve the service.',
       },
       'listCountryStates' => {
-        'data': [
-          {'id': 1, 'name': 'Khomas'},
-        ],
+        'data': path?['countryCode'] == 'BW'
+            ? [
+                {'id': 11, 'name': 'South-East'},
+              ]
+            : [
+                {'id': 1, 'name': 'Khomas'},
+                {'id': 3, 'name': 'Erongo'},
+              ],
       },
       'listCountryCities' => {
-        'data': [
-          {'id': 2, 'name': 'Windhoek'},
-        ],
+        'data': path?['countryCode'] == 'BW'
+            ? [
+                {'id': 12, 'name': 'Gaborone'},
+              ]
+            : query?['stateId'] == '3'
+            ? [
+                {'id': 4, 'name': 'Swakopmund'},
+              ]
+            : [
+                {'id': 2, 'name': 'Windhoek'},
+              ],
       },
       'requestAccountEmailCode' => {
         'challengeId': 'code',
@@ -150,7 +199,7 @@ void main() {
           'timezone': 'Africa/Windhoek',
           'expectedRevision': 5,
           'policyAccepted': true,
-          'policyId': 'policy',
+          'policyId': 'policy-NA',
           'policyRevision': 3,
         },
       );
@@ -158,7 +207,7 @@ void main() {
     },
   );
   testWidgets(
-    'profile changes save name and reference locations with current revision',
+    'selected locations save, reopen with names, and remain clearable',
     (tester) async {
       final port = _ProfilePort();
       await _pump(tester, port);
@@ -189,6 +238,124 @@ void main() {
           'locale': 'en',
           'timezone': 'Africa/Windhoek',
           'expectedRevision': 5,
+        },
+      );
+      expect(
+        port.calls.where((call) => call.operation == 'getAccountProfile'),
+        hasLength(2),
+      );
+      expect(find.text('Khomas'), findsOneWidget);
+      expect(find.text('Windhoek'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Clear region'));
+      await tester.pumpAndSettle();
+      expect(find.text('Not selected'), findsNWidgets(2));
+      await tester.ensureVisible(find.text('Save profile'));
+      await tester.tap(find.text('Save profile'));
+      await tester.pumpAndSettle();
+      expect(
+        port.calls
+            .where((call) => call.operation == 'updateAccountProfile')
+            .last
+            .body,
+        containsPair('stateId', null),
+      );
+      expect(
+        port.calls
+            .where((call) => call.operation == 'updateAccountProfile')
+            .last
+            .body,
+        containsPair('cityId', null),
+      );
+    },
+  );
+  testWidgets(
+    'saved IDs resolve through bounded country and region scoped lookups',
+    (tester) async {
+      final port = _ProfilePort()
+        ..stateId = 1
+        ..cityId = 2
+        ..includeLocationNames = false;
+      await _pump(tester, port);
+
+      expect(find.text('Khomas'), findsOneWidget);
+      expect(find.text('Windhoek'), findsOneWidget);
+      expect(find.text('Region selected'), findsNothing);
+      expect(find.text('City selected'), findsNothing);
+
+      final stateLookup = port.calls.singleWhere(
+        (call) => call.operation == 'listCountryStates',
+      );
+      expect(stateLookup.path, {'countryCode': 'NA'});
+      expect(stateLookup.query, {'search': '', 'offset': '0'});
+      final cityLookup = port.calls.singleWhere(
+        (call) => call.operation == 'listCountryCities',
+      );
+      expect(cityLookup.path, {'countryCode': 'NA'});
+      expect(cityLookup.query, {'search': '', 'offset': '0', 'stateId': '1'});
+    },
+  );
+  testWidgets('changing region clears its dependent city', (tester) async {
+    final port = _ProfilePort()
+      ..stateId = 1
+      ..cityId = 2;
+    await _pump(tester, port);
+
+    await tester.tap(find.text('Region (optional)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Erongo'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Erongo'), findsOneWidget);
+    expect(find.text('Windhoek'), findsNothing);
+    expect(find.text('Not selected'), findsOneWidget);
+  });
+  testWidgets(
+    'country changes clear optional locations and require current acceptance',
+    (tester) async {
+      final port = _ProfilePort()
+        ..stateId = 1
+        ..cityId = 2;
+      await _pump(tester, port);
+
+      await tester.tap(find.text('Country'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Botswana'));
+      await tester.pumpAndSettle();
+      expect(find.text('Not selected'), findsNWidgets(2));
+
+      await tester.ensureVisible(find.text('Save profile'));
+      await tester.tap(find.text('Save profile'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Select your country and accept its privacy notice.'),
+        findsOneWidget,
+      );
+      expect(
+        port.calls.where((call) => call.operation == 'updateAccountProfile'),
+        isEmpty,
+      );
+
+      await tester.tap(
+        find.text('I have read and agree to the privacy notice.'),
+      );
+      await tester.tap(find.text('Save profile'));
+      await tester.pumpAndSettle();
+      expect(
+        port.calls
+            .singleWhere((call) => call.operation == 'updateAccountProfile')
+            .body,
+        {
+          'displayName': 'Alex',
+          'countryCode': 'BW',
+          'stateId': null,
+          'cityId': null,
+          'locale': 'en',
+          'timezone': 'Africa/Gaborone',
+          'expectedRevision': 5,
+          'policyAccepted': true,
+          'policyId': 'policy-BW',
+          'policyRevision': 3,
         },
       );
     },

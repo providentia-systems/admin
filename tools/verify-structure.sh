@@ -18,6 +18,8 @@ test -f contracts/contract.lock.json
 test -f contracts/generated/providentia_api_client/lib/providentia_api_client.dart
 test -f tools/agent-requirements.json
 test -f tools/agent-setup.sh
+test -x tools/providentia-admin.sh
+test -f tool/providentia_admin_setup.test.mjs
 test -f tool/install_node_linux.sh
 test -f tool/test_installer_cache_health.sh
 test -f tool/test_linux_release_scripts.sh
@@ -27,7 +29,8 @@ test -f .github/workflows/release-linux.yml
 test ! -f tool/generate_api_client.mjs
 test ! -f tool/verify_toolchain.mjs
 bash tool/materialize_contract.sh
-bash -n tools/agent-setup.sh tool/install_flutter_linux.sh \
+bash -n tools/agent-setup.sh tools/providentia-admin.sh \
+  tool/install_flutter_linux.sh \
   tool/install_node_linux.sh \
   tool/test_installer_cache_health.sh \
   tool/test_linux_release_scripts.sh \
@@ -38,6 +41,12 @@ bash -n tools/agent-setup.sh tool/install_flutter_linux.sh \
   packaging/linux/build-packages.sh packaging/linux/AppRun \
   packaging/linux/providentia_admin packaging/linux/debian-postinst \
   packaging/linux/debian-postrm
+node --test tool/providentia_admin_setup.test.mjs
+
+test -f docs/index.md
+test -f docs/setup-ubuntu.md
+grep -Fq 'MySQL or MariaDB' docs/setup-ubuntu.md
+grep -Fq 'plain HTTP only for loopback' docs/setup-ubuntu.md
 
 grep -Fqx 'Exec=providentia_admin' \
   packaging/linux/com.vastdevelopmentmethod.providentia.admin.desktop
@@ -101,7 +110,7 @@ if grep -En '^[[:space:]]+(camera|drift|drift_flutter|image_picker|sqlite3):' pu
   exit 1
 fi
 
-EXPECTED="764f1b850a150f805eb178bf85cba802ba6b3ee35dcfbfae24a179049a7d55a7"
+EXPECTED="7b1f1be5d9efd311254e9840c4595e08575e8c97d35da766dab0d291c165bcae"
 ACTUAL="$(sha256sum contracts/providentia-v1.json | cut -d' ' -f1)"
 test "${ACTUAL}" = "${EXPECTED}"
 

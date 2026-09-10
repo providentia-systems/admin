@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../app/admin_layout.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/operator_authorization.dart';
 import '../access/access_groups_page.dart';
@@ -258,51 +259,44 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
           Expanded(
             child: _rows.isEmpty
                 ? const Center(child: Text('No records found.'))
-                : SingleChildScrollView(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        showCheckboxColumn: false,
-                        columns: <DataColumn>[
-                          if (_home == null && !widget.audit)
-                            const DataColumn(label: Text('Open')),
-                          for (final key in keys)
-                            DataColumn(label: Text(displayLabel(key))),
-                        ],
-                        rows: <DataRow>[
-                          for (final row in _rows)
-                            DataRow(
-                              onSelectChanged: _home == null && !widget.audit
-                                  ? (_) => _open(row)
-                                  : null,
-                              cells: <DataCell>[
-                                if (_home == null && !widget.audit)
-                                  DataCell(
-                                    IconButton(
-                                      tooltip: 'Open ${row['name']}',
-                                      icon: const Icon(Icons.open_in_new),
-                                      onPressed: _busy
-                                          ? null
-                                          : () => _open(row),
-                                    ),
+                : AdminDataTableViewport(
+                    child: DataTable(
+                      showCheckboxColumn: false,
+                      dataRowMinHeight: 48,
+                      dataRowMaxHeight: double.infinity,
+                      columns: <DataColumn>[
+                        if (_home == null && !widget.audit)
+                          const DataColumn(label: Text('Open')),
+                        for (final key in keys)
+                          DataColumn(label: Text(displayLabel(key))),
+                      ],
+                      rows: <DataRow>[
+                        for (final row in _rows)
+                          DataRow(
+                            onSelectChanged: _home == null && !widget.audit
+                                ? (_) => _open(row)
+                                : null,
+                            cells: <DataCell>[
+                              if (_home == null && !widget.audit)
+                                DataCell(
+                                  IconButton(
+                                    tooltip: 'Open ${row['name']}',
+                                    icon: const Icon(Icons.open_in_new),
+                                    onPressed: _busy ? null : () => _open(row),
                                   ),
-                                for (final key in keys)
-                                  DataCell(
-                                    ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 320,
-                                      ),
-                                      child: SelectableText(
-                                        row[key] is Map || row[key] is List
-                                            ? jsonEncode(row[key])
-                                            : '${row[key] ?? ''}',
-                                      ),
-                                    ),
+                                ),
+                              for (final key in keys)
+                                DataCell(
+                                  AdminTableCell(
+                                    identifier: isAdminIdentifierColumn(key),
+                                    value: row[key] is Map || row[key] is List
+                                        ? jsonEncode(row[key])
+                                        : '${row[key] ?? ''}',
                                   ),
-                              ],
-                            ),
-                        ],
-                      ),
+                                ),
+                            ],
+                          ),
+                      ],
                     ),
                   ),
           ),

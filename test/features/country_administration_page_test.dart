@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:providentia_admin/app/admin_layout.dart';
+import 'package:providentia_admin/app/theme.dart';
 import 'package:providentia_admin/core/auth/operator_authorization.dart';
 import 'package:providentia_admin/features/geography/country_administration_page.dart';
 
@@ -43,11 +45,13 @@ Future<void> _pump(
   FakeApi api, {
   bool policies = false,
   OperatorAuthorization? authorization,
+  Size size = const Size(1100, 1100),
 }) async {
-  await tester.binding.setSurfaceSize(const Size(1100, 1100));
+  await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
+      theme: buildAdminTheme(),
       home: Scaffold(
         body: CountryAdministrationPage(
           api: api,
@@ -61,6 +65,65 @@ Future<void> _pump(
 }
 
 void main() {
+  for (final size in <Size>[const Size(720, 700), const Size(1440, 1000)]) {
+    testWidgets(
+      'country form keeps counters, borders and validation apart at ${size.width.toInt()}px',
+      (tester) async {
+        final api = FakeApi((r) async {
+          if (r.path.endsWith('/groups')) {
+            return jsonResponse({
+              'data': r.query?['scope'] == 'account'
+                  ? [
+                      {'id': 'starter', 'name': 'New accounts'},
+                      {'id': 'invited', 'name': 'Invited accounts'},
+                    ]
+                  : [
+                      {'id': 'home', 'name': 'Starter homes'},
+                    ],
+            });
+          }
+          if (r.path.endsWith('/privacy-policies')) {
+            return jsonResponse({
+              'data': [_policy],
+            });
+          }
+          if (r.path.endsWith('/reference-updates')) {
+            return jsonResponse({'data': []});
+          }
+          return jsonResponse(
+            r.path.endsWith('/NA')
+                ? _settings
+                : {
+                    'data': [_country],
+                  },
+          );
+        });
+        await _pump(tester, api, size: size);
+        await tester.tap(find.text('Namibia'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AdminFormFields), findsOneWidget);
+        final currency = tester.getRect(
+          find.widgetWithText(TextFormField, 'Default currency'),
+        );
+        final timezone = tester.getRect(
+          find.widgetWithText(TextFormField, 'Default timezone'),
+        );
+        expect(timezone.top - currency.bottom, greaterThanOrEqualTo(19));
+        expect(find.text('3/3'), findsOneWidget);
+
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'Default timezone'),
+          '',
+        );
+        await tester.tap(find.text('Save country'));
+        await tester.pumpAndSettle();
+        expect(find.text('Enter a timezone.'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'country settings preserve independent starter groups and save publication with a revision',
     (tester) async {

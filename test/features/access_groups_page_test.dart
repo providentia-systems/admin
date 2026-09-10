@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:providentia_admin/app/admin_layout.dart';
+import 'package:providentia_admin/app/theme.dart';
 import 'package:providentia_admin/core/api/api_client.dart';
 import 'package:providentia_admin/features/access/access_groups_page.dart';
 
@@ -23,11 +25,16 @@ Map<String, Object?> _group({bool protected = false}) => <String, Object?>{
   'protected': protected,
 };
 
-Future<void> _pump(WidgetTester tester, FakeApi api) async {
-  await tester.binding.setSurfaceSize(const Size(1100, 1000));
+Future<void> _pump(
+  WidgetTester tester,
+  FakeApi api, {
+  Size size = const Size(1100, 1000),
+}) async {
+  await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
+      theme: buildAdminTheme(),
       home: Scaffold(body: AccessGroupsPage(api: api)),
     ),
   );
@@ -35,6 +42,75 @@ Future<void> _pump(WidgetTester tester, FakeApi api) async {
 }
 
 void main() {
+  for (final size in <Size>[const Size(720, 700), const Size(1440, 1000)]) {
+    testWidgets(
+      'account and home group editors keep field subtext clear at ${size.width.toInt()}px',
+      (tester) async {
+        final api = FakeApi((r) async {
+          if (r.path.endsWith('/catalog')) {
+            return jsonResponse({
+              'data': <Map<String, Object?>>[
+                _definition,
+                <String, Object?>{..._definition, 'scope': 'account'},
+              ],
+            });
+          }
+          return jsonResponse({
+            'data': <Map<String, Object?>>[
+              <String, Object?>{
+                ..._group(),
+                'scope': r.query?['scope'] ?? 'home',
+              },
+            ],
+          });
+        });
+        await _pump(tester, api, size: size);
+
+        for (final scope in <String>['home', 'account']) {
+          if (scope == 'account') {
+            await tester.tap(find.text('Accounts'));
+            await tester.pumpAndSettle();
+          }
+          await tester.tap(find.text('Starter'));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AdminFormFields), findsWidgets);
+          final name = tester.getRect(
+            find.widgetWithText(TextFormField, 'Group name'),
+          );
+          final description = tester.getRect(
+            find.widgetWithText(TextFormField, 'Description'),
+          );
+          expect(description.top - name.bottom, greaterThanOrEqualTo(19));
+          expect(find.text('7/120'), findsOneWidget);
+          expect(find.text('12/1000'), findsOneWidget);
+
+          await tester.enterText(
+            find.widgetWithText(TextFormField, 'Group name'),
+            '',
+          );
+          await tester.tap(find.text('Save group'));
+          await tester.pumpAndSettle();
+          expect(find.text('Enter a name.'), findsOneWidget);
+          final invalidName = tester.getRect(
+            find.widgetWithText(TextFormField, 'Group name'),
+          );
+          final descriptionAfterValidation = tester.getRect(
+            find.widgetWithText(TextFormField, 'Description'),
+          );
+          expect(
+            descriptionAfterValidation.top - invalidName.bottom,
+            greaterThanOrEqualTo(19),
+          );
+          expect(tester.takeException(), isNull);
+
+          await tester.tap(find.text('Close'));
+          await tester.pumpAndSettle();
+        }
+      },
+    );
+  }
+
   testWidgets(
     'editing a home group changes invitation quota and inherited permissions',
     (tester) async {
