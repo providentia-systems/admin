@@ -30,7 +30,7 @@ if "$target/bin/node" --version >/dev/null 2>&1; then
 fi
 
 bash "$(dirname "${BASH_SOURCE[0]}")/install_node_linux.sh" "$install_parent"
-if [[ "$($target/bin/node --version)" != "v$VERSION" ]]; then
+if [[ "$("$target/bin/node" --version)" != "v$VERSION" ]]; then
   echo 'Installer did not atomically repair the corrupted Node runtime.' >&2
   exit 1
 fi

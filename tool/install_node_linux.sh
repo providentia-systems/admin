@@ -19,7 +19,7 @@ fi
 
 target="$install_parent/node"
 if [[ -x "$target/bin/node" ]] &&
-  [[ "$($target/bin/node --version 2>/dev/null)" == "v$VERSION" ]]; then
+  [[ "$("$target/bin/node" --version 2>/dev/null)" == "v$VERSION" ]]; then
   echo "Using verified Node $VERSION at $target"
   exit 0
 fi
@@ -43,7 +43,7 @@ trap 'rm -rf -- "$stage"' EXIT
 tar --no-same-owner --extract --xz --file "$archive_path" --directory "$stage"
 candidate="$stage/node-v$VERSION-linux-x64"
 if [[ ! -x "$candidate/bin/node" ]] ||
-  [[ "$($candidate/bin/node --version 2>/dev/null)" != "v$VERSION" ]]; then
+  [[ "$("$candidate/bin/node" --version 2>/dev/null)" != "v$VERSION" ]]; then
   echo "The verified Node archive did not produce Node $VERSION." >&2
   exit 65
 fi

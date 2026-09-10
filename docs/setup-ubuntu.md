@@ -119,22 +119,31 @@ only in the backend's protected deployment secrets, never in this script or
 the Admin client.
 
 On the Admin PC, permit outbound DNS and HTTPS to the selected API. No inbound
-Admin application port is required. On a simple Ubuntu server, an initial UFW
-policy might allow HTTPS and tightly restricted SSH:
+Admin application port is required. On a simple Ubuntu server, add the narrow
+SSH rule before changing the default policy. Replace `YOUR_ADMIN_PUBLIC_IP` and
+keep the existing session open:
+
+```bash
+sudo ufw allow from YOUR_ADMIN_PUBLIC_IP to any port 22 proto tcp
+sudo ufw status verbose
+```
+
+Open a second independent SSH session from that address and keep it open. Do not
+continue until it succeeds. Then apply the default policy, allow the public
+HTTPS listener, and enable UFW:
 
 ```bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
-sudo ufw allow from YOUR_ADMIN_PUBLIC_IP to any port 22 proto tcp
 sudo ufw allow 443/tcp
+sudo ufw enable
 sudo ufw status verbose
 ```
 
-Replace `YOUR_ADMIN_PUBLIC_IP` before running the SSH rule. Confirm that a
-second SSH session works before enabling or changing a remote firewall. Keep
-database, Redis, PHP-FPM and metrics ports on the private container/server
-network. If the server uses OPNsense, a cloud firewall or another perimeter,
-apply the same allow-list there as well.
+Keep both sessions open until the final status and a new connection have been
+verified. Keep database, Redis, PHP-FPM and metrics ports on the private
+container/server network. If the server uses OPNsense, a cloud firewall or
+another perimeter, apply the same allow-list there as well.
 
 Terminate TLS at the reverse proxy with a certificate valid for the exact API
 hostname. Forward requests to the backend over the private network and retain
@@ -152,12 +161,21 @@ Compose services, generated secrets, mail, proxy and CORS settings.
 
 ## First sign-in
 
-From the released backend application environment, authorize the initial
-system owner once:
+From the extracted directory for the backend release that is actually running,
+authorize the initial system owner once. This example uses the bind-persistence
+Compose file from the backend quick start; replace `X.Y.Z` with that release:
 
 ```bash
-php bin/providentia system:owner owner@example.com
+cd /opt/providentia/releases/vX.Y.Z/providentia-backend-vX.Y.Z
+docker compose --env-file /etc/providentia/production.env \
+  -f compose.production.yaml -f compose.production.bind.yaml \
+  exec -T api php bin/providentia system:owner owner@example.com
 ```
+
+For a backend that uses Docker-managed named volumes, omit
+`-f compose.production.bind.yaml`. Do not install PHP on the Admin PC or run
+this command from the Admin repository; the command executes inside the
+released backend API container.
 
 Then open Admin, request the eight-digit code for that address, enter the code,
 and complete the name, country and current privacy-notice fields. Region and
