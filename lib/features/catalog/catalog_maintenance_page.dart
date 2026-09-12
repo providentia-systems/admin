@@ -249,8 +249,9 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
           final page = await widget.repository.list(type, offset: offset);
           if (!mounted ||
               widget.session.authorizationEpoch != epoch ||
-              widget.session.phase != SessionPhase.authenticated)
+              widget.session.phase != SessionPhase.authenticated) {
             return;
+          }
           rows.addAll(
             page.where(
               (row) =>
@@ -259,11 +260,12 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
           );
           if (page.length < 100) break;
         } catch (_) {
-          if (mounted)
+          if (mounted) {
             setState(
               () => _error =
                   'Reference choices could not be loaded. Close and retry.',
             );
+          }
           return;
         }
       }
@@ -309,8 +311,9 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
       );
       if (mounted &&
           widget.session.phase == SessionPhase.authenticated &&
-          widget.session.authorizationEpoch == epoch)
+          widget.session.authorizationEpoch == epoch) {
         Navigator.pop(context);
+      }
     } on ApiException catch (error) {
       if (!mounted || widget.session.authorizationEpoch != epoch) return;
       setState(() {
