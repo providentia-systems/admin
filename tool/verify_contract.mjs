@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expectedDigest =
-  '7b1f1be5d9efd311254e9840c4595e08575e8c97d35da766dab0d291c165bcae';
+  '62612d00deaf16ba92ec29d836aa940c16e2370b9925676fe241a1d958941304';
 const contractBytes = await readFile(
   path.join(root, 'contracts', 'providentia-v1.json'),
 );
@@ -40,10 +40,10 @@ const generated = await readFile(
 );
 
 const digest = createHash('sha256').update(contractBytes).digest('hex');
-assert(digest === expectedDigest, 'OpenAPI digest drifted from backend 2.0.0.');
+assert(digest === expectedDigest, 'OpenAPI digest drifted from backend 2.1.0.');
 assert(contract.openapi === '3.1.0', 'OpenAPI version must be 3.1.0.');
-assert(contract.info?.version === '2.0.0', 'API version must be 2.0.0.');
-assert(Object.keys(contract.paths ?? {}).length === 174, 'Expected 174 API paths.');
+assert(contract.info?.version === '2.1.0', 'API version must be 2.1.0.');
+assert(Object.keys(contract.paths ?? {}).length === 176, 'Expected 176 API paths.');
 
 let operationCount = 0;
 const operationIds = new Set();
@@ -55,26 +55,26 @@ for (const value of Object.values(contract.paths ?? {})) {
     }
   }
 }
-assert(operationCount === 208, 'Expected 208 API operations.');
+assert(operationCount === 210, 'Expected 210 API operations.');
 assert(
   lock.artifacts?.['providentia-v1.json']?.sha256 === expectedDigest,
   'Backend contract lock digest does not match.',
 );
 assert(manifest.contractSha256 === expectedDigest, 'Generated manifest drifted.');
 assert(manifest.repositoryRole === 'linux-admin-client', 'Generated facade role drifted.');
-assert(manifest.operationCount === 73, 'Generated Admin operation count drifted.');
+assert(manifest.operationCount === 75, 'Generated Admin operation count drifted.');
 assert(
   generated.includes(`// Contract SHA-256: ${expectedDigest}`),
   'Generated Dart client is not bound to this contract.',
 );
 assert(!generated.includes('/api/v1/homes'), 'Generated Admin client exposes homes.');
-assert(lock.apiVersion === '2.0.0', 'Contract lock API version drifted.');
-assert(lock.version === '2.0.0', 'Contract lock publication version drifted.');
+assert(lock.apiVersion === '2.1.0', 'Contract lock API version drifted.');
+assert(lock.version === '2.1.0', 'Contract lock publication version drifted.');
 assert(lock.sha256 === expectedDigest, 'Contract lock publication digest drifted.');
-assert(manifest.contractVersion === '2.0.0', 'Generated manifest API version drifted.');
-assert(Object.keys(contract.components?.schemas ?? {}).length === 239, 'Expected 239 schemas.');
+assert(manifest.contractVersion === '2.1.0', 'Generated manifest API version drifted.');
+assert(Object.keys(contract.components?.schemas ?? {}).length === 249, 'Expected 249 schemas.');
 const allowedOperations = new Set(manifest.allowedOperationIds);
-assert(allowedOperations.size === 73, 'Admin allowlist contains duplicate or missing operations.');
+assert(allowedOperations.size === 75, 'Admin allowlist contains duplicate or missing operations.');
 for (const operationId of allowedOperations) {
   assert(operationIds.has(operationId), `Admin operation ${operationId} is absent from the contract.`);
 }
@@ -215,7 +215,7 @@ assert(
   'Generated Admin client must not expose removeHomeMembership.',
 );
 
-process.stdout.write(`Admin contract verified: 2.0.0 / ${digest}.\n`);
+process.stdout.write(`Admin contract verified: 2.1.0 / ${digest}.\n`);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

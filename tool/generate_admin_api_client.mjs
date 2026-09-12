@@ -19,6 +19,8 @@ const digest = createHash('sha256').update(contractBytes).digest('hex');
 const check = process.argv.includes('--check');
 
 const allowed = new Set([
+  'listCatalogEntities',
+  'saveCatalogEntity',
   'requestEmailCode',
   'verifyEmailCode',
   'getAccountProfile',
