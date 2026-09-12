@@ -6,20 +6,29 @@ import 'package:flutter/material.dart';
 import '../../app/admin_layout.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/operator_authorization.dart';
+import '../../core/auth/session_controller.dart';
 import '../access/access_groups_page.dart';
 import '../access/access_repository.dart';
 import 'operator_image.dart';
+import 'operator_inventory_editor.dart';
+import 'operator_inventory_repository.dart';
+import 'operator_shopping_editor.dart';
+import 'operator_shopping_repository.dart';
+import 'operator_stock_preference_editor.dart';
+import 'operator_stock_preference_repository.dart';
 
 /// Paged operator projection. The backend authorizes every collection read.
 final class OperatorRecordsPage extends StatefulWidget {
   const OperatorRecordsPage({
     required this.api,
     required this.authorization,
+    required this.session,
     this.audit = false,
     super.key,
   });
   final AdminApi api;
   final OperatorAuthorization authorization;
+  final SessionController session;
   final bool audit;
   @override
   State<OperatorRecordsPage> createState() => _OperatorRecordsPageState();
@@ -37,17 +46,116 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
   @override
   void initState() {
     super.initState();
+    widget.session.addListener(_authorizationChanged);
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    widget.session.removeListener(_authorizationChanged);
     _search.dispose();
     super.dispose();
   }
 
+  bool get _canEdit =>
+      _home != null &&
+      widget.session.phase == SessionPhase.authenticated &&
+      widget.session.authorization.has('homes.manage') &&
+      const [
+        'products',
+        'categories',
+        'locations',
+        'stores',
+        'shopping-lists',
+        'shopping-lines',
+      ].contains(_collection);
+
+  void _authorizationChanged() {
+    if (widget.session.phase != SessionPhase.authenticated) {
+      ++_generation;
+      _search.clear();
+      setState(() {
+        _home = null;
+        _rows = [];
+        _error = null;
+        _busy = false;
+      });
+    }
+  }
+
+  bool _authorized(int epoch) =>
+      mounted &&
+      widget.session.phase == SessionPhase.authenticated &&
+      widget.session.authorizationEpoch == epoch;
+
+  Future<void> _edit([Record? row]) async {
+    if (!_canEdit) return;
+    final epoch = widget.session.authorizationEpoch;
+    final homeId = '${_home!['id']}';
+    if (_collection == 'shopping-lists' || _collection == 'shopping-lines') {
+      await showDialog<bool>(
+        context: context,
+        builder: (_) => OperatorShoppingEditor(
+          repository: OperatorShoppingRepository(widget.api),
+          session: widget.session,
+          homeId: homeId,
+          line: _collection == 'shopping-lines',
+          record: row,
+        ),
+      );
+      if (_authorized(epoch)) await _load();
+      return;
+    }
+    final kind = switch (_collection) {
+      'products' => OperatorInventoryKind.product,
+      'categories' => OperatorInventoryKind.category,
+      'locations' => OperatorInventoryKind.location,
+      'stores' => OperatorInventoryKind.store,
+      _ => throw StateError('Unsupported household editor.'),
+    };
+    try {
+      await showDialog<bool>(
+        context: context,
+        builder: (_) => OperatorInventoryEditor(
+          repository: OperatorInventoryRepository(widget.api),
+          session: widget.session,
+          homeId: homeId,
+          kind: kind,
+          record: row == null
+              ? null
+              : OperatorInventoryRecord.fromRow(kind, row),
+        ),
+      );
+      if (_authorized(epoch)) await _load();
+    } on Object {
+      if (_authorized(epoch)) {
+        setState(
+          () => _error =
+              'This record cannot be edited. Reload the household records.',
+        );
+      }
+    }
+  }
+
+  Future<void> _preferences(Record row) async {
+    if (!_canEdit || _collection != 'products') return;
+    final epoch = widget.session.authorizationEpoch;
+    final homeId = '${_home!['id']}';
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => OperatorStockPreferenceEditor(
+        repository: OperatorStockPreferenceRepository(widget.api),
+        session: widget.session,
+        homeId: homeId,
+        homeProductId: '${row['id']}',
+      ),
+    );
+    if (_authorized(epoch)) await _load();
+  }
+
   Future<void> _load() async {
     final generation = ++_generation;
+    final epoch = widget.session.authorizationEpoch;
     setState(() {
       _busy = true;
       _error = null;
@@ -65,14 +173,14 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
           if (_home == null && !widget.audit) 'search': _search.text.trim(),
         },
       );
-      if (mounted && generation == _generation) {
+      if (_authorized(epoch) && generation == _generation) {
         setState(() {
           _rows = records(response.jsonObject);
           _busy = false;
         });
       }
     } on Object catch (error) {
-      if (mounted && generation == _generation) {
+      if (_authorized(epoch) && generation == _generation) {
         setState(() {
           _rows = <Record>[];
           _busy = false;
@@ -85,6 +193,8 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
   }
 
   Future<void> _open(Record home) async {
+    final epoch = widget.session.authorizationEpoch;
+    final generation = ++_generation;
     setState(() {
       _busy = true;
       _error = null;
@@ -93,14 +203,14 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
       final result = (await widget.api.get(
         '/api/v1/admin/homes/${home['id']}',
       )).jsonObject;
-      if (!mounted) return;
+      if (!_authorized(epoch) || generation != _generation) return;
       setState(() {
         _home = result;
         _offset = 0;
       });
       await _load();
     } on Object catch (error) {
-      if (mounted) {
+      if (_authorized(epoch) && generation == _generation) {
         setState(() {
           _busy = false;
           _error = error is ApiException
@@ -207,6 +317,20 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
                           },
                     child: const Text('Change group'),
                   ),
+                if (_canEdit)
+                  FilledButton.icon(
+                    onPressed: _busy ? null : () => _edit(),
+                    icon: const Icon(Icons.add),
+                    label: Text(switch (_collection) {
+                      'products' => 'Create product',
+                      'categories' => 'Create category',
+                      'locations' => 'Create location',
+                      'stores' => 'Create store',
+                      'shopping-lists' => 'Create shopping list',
+                      'shopping-lines' => 'Create shopping item',
+                      _ => 'Create',
+                    }),
+                  ),
                 DropdownButton<String>(
                   value: _collection,
                   items: <DropdownMenuItem<String>>[
@@ -214,6 +338,7 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
                       'products',
                       'categories',
                       'locations',
+                      'stores',
                       'stock',
                       'movements',
                       'receipts',
@@ -265,6 +390,9 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
                       dataRowMinHeight: 48,
                       dataRowMaxHeight: double.infinity,
                       columns: <DataColumn>[
+                        if (_canEdit) const DataColumn(label: Text('Edit')),
+                        if (_canEdit && _collection == 'products')
+                          const DataColumn(label: Text('Stock preferences')),
                         if (_home == null && !widget.audit)
                           const DataColumn(label: Text('Open')),
                         for (final key in keys)
@@ -277,6 +405,25 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
                                 ? (_) => _open(row)
                                 : null,
                             cells: <DataCell>[
+                              if (_canEdit)
+                                DataCell(
+                                  IconButton(
+                                    tooltip: 'Edit record',
+                                    icon: const Icon(Icons.edit_outlined),
+                                    onPressed: _busy ? null : () => _edit(row),
+                                  ),
+                                ),
+                              if (_canEdit && _collection == 'products')
+                                DataCell(
+                                  IconButton(
+                                    tooltip: 'Stock preferences',
+                                    icon: const Icon(Icons.tune),
+                                    onPressed:
+                                        _busy || row['status'] != 'active'
+                                        ? null
+                                        : () => _preferences(row),
+                                  ),
+                                ),
                               if (_home == null && !widget.audit)
                                 DataCell(
                                   IconButton(

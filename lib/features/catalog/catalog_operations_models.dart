@@ -111,6 +111,31 @@ final class CatalogIconSummary {
   final int revision;
 }
 
+final class CatalogPackSummary {
+  CatalogPackSummary.fromJson(Map<String, Object?> json)
+    : id = _string(json, 'id'),
+      packText = _string(json, 'packText'),
+      amount = _nullableString(json, 'amount'),
+      normalizedBaseAmount = _nullableString(json, 'normalizedBaseAmount'),
+      multiplicity = _positiveInt(json, 'multiplicity'),
+      revision = _positiveInt(json, 'revision') {
+    _requireUuid(id, 'pack id');
+    _requireText(packText, 'pack text', maximum: 191);
+    for (final value in [amount, normalizedBaseAmount]) {
+      if (value != null &&
+          !RegExp(r'^\d{1,12}(?:\.\d{1,8})?$').hasMatch(value)) {
+        throw const FormatException('Invalid pack measure.');
+      }
+    }
+  }
+  final String id;
+  final String packText;
+  final String? amount;
+  final String? normalizedBaseAmount;
+  final int multiplicity;
+  final int revision;
+}
+
 final class CatalogProductDetail {
   CatalogProductDetail({
     required this.id,
@@ -122,7 +147,9 @@ final class CatalogProductDetail {
     required this.category,
     required this.revision,
     required List<CatalogIconSummary> icons,
-  }) : icons = UnmodifiableListView<CatalogIconSummary>(icons) {
+    List<CatalogPackSummary> packs = const [],
+  }) : icons = UnmodifiableListView<CatalogIconSummary>(icons),
+       packs = UnmodifiableListView<CatalogPackSummary>(packs) {
     _requireUuid(id, 'product id');
     _requireUuid(requestedId, 'requested product id');
     _requireUuid(categoryId, 'category id');
@@ -135,9 +162,6 @@ final class CatalogProductDetail {
   }
 
   factory CatalogProductDetail.fromJson(Map<String, Object?> json) {
-    // Packs are intentionally not projected into Admin state, but their
-    // required container is still validated so contract drift fails closed.
-    _objectList(json, 'packs');
     return CatalogProductDetail(
       id: _string(json, 'id'),
       requestedId: _string(json, 'requestedId'),
@@ -147,6 +171,10 @@ final class CatalogProductDetail {
       categoryId: _string(json, 'categoryId'),
       category: _string(json, 'category'),
       revision: _positiveInt(json, 'revision'),
+      packs: _objectList(
+        json,
+        'packs',
+      ).map(CatalogPackSummary.fromJson).toList(),
       icons: _objectList(
         json,
         'icons',
@@ -163,6 +191,7 @@ final class CatalogProductDetail {
   final String category;
   final int revision;
   final List<CatalogIconSummary> icons;
+  final List<CatalogPackSummary> packs;
 
   int get currentIconRevision => icons.fold<int>(
     0,

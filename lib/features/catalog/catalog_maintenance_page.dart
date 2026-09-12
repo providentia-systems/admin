@@ -10,18 +10,20 @@ class CatalogMaintenancePage extends StatefulWidget {
     required this.api,
     required this.session,
     required this.canCurate,
+    this.productId,
     super.key,
   });
   final AdminApi api;
   final SessionController session;
   final bool canCurate;
+  final String? productId;
   @override
   State<CatalogMaintenancePage> createState() => _CatalogMaintenancePageState();
 }
 
 class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
   late final _repository = CatalogMaintenanceRepository(widget.api);
-  String _type = 'category';
+  late String _type = widget.productId == null ? 'category' : 'product';
   int _offset = 0;
   int _request = 0;
   List<CatalogEntity> _rows = const [];
@@ -63,7 +65,11 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
       _rows = const [];
     });
     try {
-      final rows = await _repository.list(_type, offset: _offset);
+      final rows = await _repository.list(
+        _type,
+        offset: _offset,
+        productId: widget.productId,
+      );
       if (!_authorized(epoch) || request != _request) return;
       setState(() {
         _rows = rows;
@@ -86,6 +92,7 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
         repository: _repository,
         session: widget.session,
         type: _type,
+        productId: widget.productId,
         entity: entity,
       ),
     );
@@ -94,7 +101,11 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Catalog entities')),
+    appBar: AppBar(
+      title: Text(
+        widget.productId == null ? 'Catalog entities' : 'Product master',
+      ),
+    ),
     body: Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -110,7 +121,8 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
                   isExpanded: true,
                   items: [
                     for (final type in catalogEntityFields.keys)
-                      DropdownMenuItem(value: type, child: Text(type)),
+                      if (widget.productId == null || type != 'identity-rule')
+                        DropdownMenuItem(value: type, child: Text(type)),
                   ],
                   onChanged: _busy
                       ? null
@@ -124,7 +136,9 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
                         },
                 ),
               ),
-              if (widget.canCurate)
+              if (widget.canCurate &&
+                  (widget.productId == null ||
+                      !const {'product', 'category', 'unit'}.contains(_type)))
                 FilledButton.icon(
                   onPressed: _busy ? null : () => _edit(),
                   icon: const Icon(Icons.add),
@@ -190,11 +204,13 @@ class _CatalogEntityEditor extends StatefulWidget {
     required this.session,
     required this.type,
     this.entity,
+    this.productId,
   });
   final CatalogMaintenanceRepository repository;
   final SessionController session;
   final String type;
   final CatalogEntity? entity;
+  final String? productId;
   @override
   State<_CatalogEntityEditor> createState() => _CatalogEntityEditorState();
 }
@@ -210,6 +226,7 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
               'multiplicity' || 'baseFactor' => '1',
               'attributesJson' => '{}',
               'barcodeType' => 'other',
+              'productId' => widget.productId ?? '',
               _ => '',
             },
       ),
@@ -246,7 +263,13 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
       final rows = <CatalogEntity>[];
       for (var offset = 0; offset < 10000; offset += 100) {
         try {
-          final page = await widget.repository.list(type, offset: offset);
+          final page = await widget.repository.list(
+            type,
+            offset: offset,
+            productId: const {'product', 'variant', 'pack'}.contains(type)
+                ? widget.productId
+                : null,
+          );
           if (!mounted ||
               widget.session.authorizationEpoch != epoch ||
               widget.session.phase != SessionPhase.authenticated) {

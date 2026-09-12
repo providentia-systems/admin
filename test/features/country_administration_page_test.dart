@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:providentia_admin/app/admin_layout.dart';
 import 'package:providentia_admin/app/theme.dart';
+import 'package:providentia_admin/core/api/api_client.dart';
 import 'package:providentia_admin/core/auth/operator_authorization.dart';
 import 'package:providentia_admin/features/geography/country_administration_page.dart';
 
@@ -294,6 +295,82 @@ void main() {
       expect(request.body, containsPair('expectedRevision', 0));
       expect(request.body, containsPair('status', 'published'));
       expect(api.requests.where((r) => r.method == 'PUT'), isEmpty);
+    },
+  );
+  testWidgets(
+    'only draft policies expose revision-bound removal and published notice remains',
+    (tester) async {
+      var removed = false;
+      final api = FakeApi((request) async {
+        if (request.method == 'DELETE') {
+          removed = true;
+          return jsonResponse({'removed': true});
+        }
+        return jsonResponse({
+          'data': [
+            _policy,
+            if (!removed)
+              {
+                ..._policy,
+                'id': 'draft',
+                'title': 'Unused draft',
+                'status': 'draft',
+                'revision': 2,
+              },
+          ],
+        });
+      });
+      await _pump(tester, api, policies: true);
+      expect(find.byTooltip('Remove draft policy'), findsOneWidget);
+      await tester.tap(find.byTooltip('Remove draft policy'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Audit reason'),
+        'Superseded draft',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Remove').last);
+      await tester.pumpAndSettle();
+      final request = api.requests.singleWhere((r) => r.method == 'DELETE');
+      expect(request.path, '/api/v1/admin/privacy-policies/draft');
+      expect(request.body, {
+        'expectedRevision': 2,
+        'reason': 'Superseded draft',
+      });
+      expect(find.text('Unused draft'), findsNothing);
+      expect(find.text('Privacy notice'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'policy removal authorization loss clears the list and confirmation',
+    (tester) async {
+      final api = FakeApi((request) async {
+        if (request.method == 'DELETE') {
+          throw const ApiException(statusCode: 401, message: 'Expired');
+        }
+        return jsonResponse({
+          'data': [
+            {..._policy, 'status': 'draft'},
+          ],
+        });
+      });
+      await _pump(tester, api, policies: true);
+      await tester.tap(find.byTooltip('Remove draft policy'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Audit reason'),
+        'Unused',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Remove').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Privacy notice'), findsNothing);
+      expect(find.widgetWithText(TextField, 'Audit reason'), findsNothing);
+      expect(
+        find.text('Administrator access changed. Sign in again.'),
+        findsOneWidget,
+      );
     },
   );
 }

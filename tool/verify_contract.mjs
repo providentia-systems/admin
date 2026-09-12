@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expectedDigest =
-  '62612d00deaf16ba92ec29d836aa940c16e2370b9925676fe241a1d958941304';
+  '40a8477521baa6c41cf2c5d872068f5ae1bf255a8d0bbccc97a05688d705ad57';
 const contractBytes = await readFile(
   path.join(root, 'contracts', 'providentia-v1.json'),
 );
@@ -43,7 +43,7 @@ const digest = createHash('sha256').update(contractBytes).digest('hex');
 assert(digest === expectedDigest, 'OpenAPI digest drifted from backend 2.1.0.');
 assert(contract.openapi === '3.1.0', 'OpenAPI version must be 3.1.0.');
 assert(contract.info?.version === '2.1.0', 'API version must be 2.1.0.');
-assert(Object.keys(contract.paths ?? {}).length === 176, 'Expected 176 API paths.');
+assert(Object.keys(contract.paths ?? {}).length === 194, 'Expected 194 API paths.');
 
 let operationCount = 0;
 const operationIds = new Set();
@@ -55,14 +55,14 @@ for (const value of Object.values(contract.paths ?? {})) {
     }
   }
 }
-assert(operationCount === 210, 'Expected 210 API operations.');
+assert(operationCount === 235, 'Expected 235 API operations.');
 assert(
   lock.artifacts?.['providentia-v1.json']?.sha256 === expectedDigest,
   'Backend contract lock digest does not match.',
 );
 assert(manifest.contractSha256 === expectedDigest, 'Generated manifest drifted.');
 assert(manifest.repositoryRole === 'linux-admin-client', 'Generated facade role drifted.');
-assert(manifest.operationCount === 75, 'Generated Admin operation count drifted.');
+assert(manifest.operationCount === 92, 'Generated Admin operation count drifted.');
 assert(
   generated.includes(`// Contract SHA-256: ${expectedDigest}`),
   'Generated Dart client is not bound to this contract.',
@@ -72,9 +72,9 @@ assert(lock.apiVersion === '2.1.0', 'Contract lock API version drifted.');
 assert(lock.version === '2.1.0', 'Contract lock publication version drifted.');
 assert(lock.sha256 === expectedDigest, 'Contract lock publication digest drifted.');
 assert(manifest.contractVersion === '2.1.0', 'Generated manifest API version drifted.');
-assert(Object.keys(contract.components?.schemas ?? {}).length === 249, 'Expected 249 schemas.');
+assert(Object.keys(contract.components?.schemas ?? {}).length === 285, 'Expected 285 schemas.');
 const allowedOperations = new Set(manifest.allowedOperationIds);
-assert(allowedOperations.size === 75, 'Admin allowlist contains duplicate or missing operations.');
+assert(allowedOperations.size === 92, 'Admin allowlist contains duplicate or missing operations.');
 for (const operationId of allowedOperations) {
   assert(operationIds.has(operationId), `Admin operation ${operationId} is absent from the contract.`);
 }

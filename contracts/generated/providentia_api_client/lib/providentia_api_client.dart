@@ -1,6 +1,6 @@
 // GENERATED FILE - DO NOT EDIT.
 // Source: contracts/providentia-v1.json
-// Contract SHA-256: 62612d00deaf16ba92ec29d836aa940c16e2370b9925676fe241a1d958941304
+// Contract SHA-256: 40a8477521baa6c41cf2c5d872068f5ae1bf255a8d0bbccc97a05688d705ad57
 // Home records use explicitly authorized operator endpoints; tenant mutation routes are excluded.
 
 library;
@@ -27,6 +27,11 @@ const adminApiOperations = <String, AdminApiOperation>{
     operationId: 'assignAccessGroup',
     method: 'PUT',
     pathTemplate: '/api/v1/admin/access/{scope}/{subjectId}',
+  ),
+  'checkOperatorShoppingLine': AdminApiOperation(
+    operationId: 'checkOperatorShoppingLine',
+    method: 'PUT',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/shopping-lists/{listId}/lines/{lineId}/checked',
   ),
   'completeAccountOnboarding': AdminApiOperation(
     operationId: 'completeAccountOnboarding',
@@ -58,6 +63,36 @@ const adminApiOperations = <String, AdminApiOperation>{
     method: 'POST',
     pathTemplate: '/api/v1/operator/billing/homes/{homeId}/overrides',
   ),
+  'createOperatorHomeCategory': AdminApiOperation(
+    operationId: 'createOperatorHomeCategory',
+    method: 'POST',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/categories',
+  ),
+  'createOperatorHomeLocation': AdminApiOperation(
+    operationId: 'createOperatorHomeLocation',
+    method: 'POST',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/locations',
+  ),
+  'createOperatorHomeProduct': AdminApiOperation(
+    operationId: 'createOperatorHomeProduct',
+    method: 'POST',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/products',
+  ),
+  'createOperatorHomeStore': AdminApiOperation(
+    operationId: 'createOperatorHomeStore',
+    method: 'POST',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/stores',
+  ),
+  'createOperatorShoppingLine': AdminApiOperation(
+    operationId: 'createOperatorShoppingLine',
+    method: 'POST',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/shopping-lists/{listId}/lines',
+  ),
+  'createOperatorShoppingList': AdminApiOperation(
+    operationId: 'createOperatorShoppingList',
+    method: 'POST',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/shopping-lists',
+  ),
   'createPrivacyPolicy': AdminApiOperation(
     operationId: 'createPrivacyPolicy',
     method: 'POST',
@@ -72,6 +107,16 @@ const adminApiOperations = <String, AdminApiOperation>{
     operationId: 'decideCatalogProposal',
     method: 'POST',
     pathTemplate: '/api/v1/catalog-admin/proposals/{proposalId}/decision',
+  ),
+  'deleteAccessGroup': AdminApiOperation(
+    operationId: 'deleteAccessGroup',
+    method: 'DELETE',
+    pathTemplate: '/api/v1/admin/access/groups/{groupId}',
+  ),
+  'deleteDraftPrivacyPolicy': AdminApiOperation(
+    operationId: 'deleteDraftPrivacyPolicy',
+    method: 'DELETE',
+    pathTemplate: '/api/v1/admin/privacy-policies/{policyId}',
   ),
   'deleteOwnAvatar': AdminApiOperation(
     operationId: 'deleteOwnAvatar',
@@ -137,6 +182,11 @@ const adminApiOperations = <String, AdminApiOperation>{
     operationId: 'getOperatorHomeImage',
     method: 'GET',
     pathTemplate: '/api/v1/admin/homes/{homeId}/image',
+  ),
+  'getOperatorStockPreference': AdminApiOperation(
+    operationId: 'getOperatorStockPreference',
+    method: 'GET',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/stock-preferences/{homeProductId}',
   ),
   'getOperatorUserAvatar': AdminApiOperation(
     operationId: 'getOperatorUserAvatar',
@@ -278,6 +328,11 @@ const adminApiOperations = <String, AdminApiOperation>{
     method: 'PUT',
     pathTemplate: '/api/v1/catalog-contributions/{contributionId}/image-publication',
   ),
+  'putOperatorStockPreference': AdminApiOperation(
+    operationId: 'putOperatorStockPreference',
+    method: 'PUT',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/stock-preferences/{homeProductId}',
+  ),
   'putOwnAvatar': AdminApiOperation(
     operationId: 'putOwnAvatar',
     method: 'PUT',
@@ -372,6 +427,36 @@ const adminApiOperations = <String, AdminApiOperation>{
     operationId: 'updateOperatorAccountStatus',
     method: 'PATCH',
     pathTemplate: '/api/v1/admin/accounts/{userId}/status',
+  ),
+  'updateOperatorHomeCategory': AdminApiOperation(
+    operationId: 'updateOperatorHomeCategory',
+    method: 'PATCH',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/categories/{categoryId}',
+  ),
+  'updateOperatorHomeLocation': AdminApiOperation(
+    operationId: 'updateOperatorHomeLocation',
+    method: 'PATCH',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/locations/{locationId}',
+  ),
+  'updateOperatorHomeProduct': AdminApiOperation(
+    operationId: 'updateOperatorHomeProduct',
+    method: 'PATCH',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/products/{homeProductId}',
+  ),
+  'updateOperatorHomeStore': AdminApiOperation(
+    operationId: 'updateOperatorHomeStore',
+    method: 'PATCH',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/stores/{storeId}',
+  ),
+  'updateOperatorShoppingLine': AdminApiOperation(
+    operationId: 'updateOperatorShoppingLine',
+    method: 'PATCH',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/shopping-lists/{listId}/lines/{lineId}',
+  ),
+  'updateOperatorShoppingList': AdminApiOperation(
+    operationId: 'updateOperatorShoppingList',
+    method: 'PATCH',
+    pathTemplate: '/api/v1/admin/homes/{homeId}/shopping-lists/{listId}',
   ),
   'updatePrivacyPolicy': AdminApiOperation(
     operationId: 'updatePrivacyPolicy',

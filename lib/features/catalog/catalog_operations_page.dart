@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/session_controller.dart';
+import 'catalog_maintenance_page.dart';
 import 'catalog_models.dart';
 import 'catalog_operations_models.dart';
 import 'catalog_operations_repository.dart';
+import 'catalog_product_inspection.dart';
 import 'published_product_picker.dart';
 
 enum _OperationsSection { identities, conflicts, merges }
@@ -137,7 +139,7 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Search published global identities and inspect the exact current revision before updating icon metadata.',
+                  'Inspect published product identity, measures and icons; maintain related catalog records from the product master.',
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
@@ -148,22 +150,13 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
                 ),
                 const SizedBox(height: 16),
                 if (_selectedProduct case final product?) ...<Widget>[
-                  Text(
-                    product.canonicalName,
-                    style: Theme.of(context).textTheme.titleMedium,
+                  Expanded(
+                    child: CatalogProductInspection(
+                      product: product,
+                      onManage: () => _manageProduct(product),
+                    ),
                   ),
-                  Text(
-                    product.brand.isEmpty
-                        ? product.category
-                        : '${product.brand} • ${product.category}',
-                  ),
-                  const SizedBox(height: 8),
-                  SelectableText('Product: ${product.id}'),
-                  Text('Product revision ${product.revision}'),
-                  Text('Current icon revision ${product.currentIconRevision}'),
-                  if (product.redirected)
-                    const Text('Resolved to the canonical redirect target.'),
-                  const Spacer(),
+                  const SizedBox(height: 12),
                   FilledButton.tonalIcon(
                     key: const Key('update-product-icon'),
                     onPressed: _loading ? null : _updateProductIcon,
@@ -446,6 +439,33 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
       ),
     ],
   );
+
+  Future<void> _manageProduct(CatalogProductDetail product) async {
+    final epoch = widget.session.authorizationEpoch;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CatalogMaintenancePage(
+          api: widget.api,
+          session: widget.session,
+          canCurate: widget.canCurate,
+          productId: product.id,
+        ),
+      ),
+    );
+    if (!_authorized(epoch)) return;
+    try {
+      final refreshed = await _operations.product(product.id);
+      if (_authorized(epoch)) setState(() => _selectedProduct = refreshed);
+    } on Object {
+      if (_authorized(epoch)) {
+        setState(() {
+          _selectedProduct = null;
+          _safeMessage =
+              'This product could not be reloaded as a published identity. Review its current status in Catalog entities.';
+        });
+      }
+    }
+  }
 
   Future<void> _chooseProduct() async {
     final product = await showPublishedProductPicker(

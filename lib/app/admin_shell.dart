@@ -54,7 +54,7 @@ class _AdminShellState extends State<AdminShell> {
         _Destination(
           label: 'Groups',
           icon: Icons.group_work_outlined,
-          page: AccessGroupsPage(api: widget.api),
+          page: AccessGroupsPage(api: widget.api, session: widget.session),
         ),
       if (authorization.has('homes.read'))
         _Destination(
@@ -62,6 +62,7 @@ class _AdminShellState extends State<AdminShell> {
           icon: Icons.home_outlined,
           page: OperatorRecordsPage(
             api: widget.api,
+            session: widget.session,
             authorization: authorization,
           ),
         ),
@@ -71,6 +72,7 @@ class _AdminShellState extends State<AdminShell> {
           icon: Icons.public,
           page: CountryAdministrationPage(
             api: widget.api,
+            session: widget.session,
             authorization: authorization,
           ),
         ),
@@ -80,6 +82,7 @@ class _AdminShellState extends State<AdminShell> {
           icon: Icons.policy_outlined,
           page: CountryAdministrationPage(
             api: widget.api,
+            session: widget.session,
             authorization: authorization,
             policies: true,
           ),
@@ -90,6 +93,7 @@ class _AdminShellState extends State<AdminShell> {
           icon: Icons.history,
           page: OperatorRecordsPage(
             api: widget.api,
+            session: widget.session,
             authorization: authorization,
             audit: true,
           ),
