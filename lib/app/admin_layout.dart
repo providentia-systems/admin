@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/auth/session_controller.dart';
+
 /// Shared spacing for fields and validation content in administrator forms.
 ///
 /// Text fields reserve different amounts of height for counters and validation
@@ -124,4 +126,60 @@ bool isAdminIdentifierColumn(String key) {
   return normalized == 'id' ||
       normalized.endsWith('_id') ||
       RegExp(r'Id$').hasMatch(key);
+}
+
+/// Shared confirmation for removing unused administrative configuration.
+Future<String?> confirmAdministrativeRemoval(
+  BuildContext context, {
+  required String label,
+  required String detail,
+  SessionController? session,
+}) {
+  final epoch = session?.authorizationEpoch;
+  var reason = '';
+  return showDialog<String>(
+    context: context,
+    builder: (dialogContext) {
+      Widget confirmation() => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Remove $label?'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(detail),
+                TextField(
+                  maxLength: 500,
+                  decoration: const InputDecoration(labelText: 'Audit reason'),
+                  onChanged: (value) => setState(() => reason = value.trim()),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: reason.isEmpty
+                  ? null
+                  : () => Navigator.pop(dialogContext, reason),
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
+      );
+      if (session == null) return confirmation();
+      return AnimatedBuilder(
+        animation: session,
+        builder: (_, _) =>
+            session.phase == SessionPhase.authenticated &&
+                session.authorizationEpoch == epoch
+            ? confirmation()
+            : const SizedBox.shrink(),
+      );
+    },
+  );
 }

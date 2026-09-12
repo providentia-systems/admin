@@ -59,10 +59,14 @@ const catalogNullableFields = {'variantId', 'unitId', 'amount', 'packId'};
 final class CatalogMaintenanceRepository {
   const CatalogMaintenanceRepository(this.api);
   final AdminApi api;
-  Future<List<CatalogEntity>> list(String type, {int offset = 0}) async {
+  Future<List<CatalogEntity>> list(
+    String type, {
+    int offset = 0,
+    String? productId,
+  }) async {
     final response = await api.get(
       '/api/v1/catalog-admin/entities/$type',
-      query: {'offset': '$offset'},
+      query: {'offset': '$offset', 'productId': ?productId},
     );
     final rows = (response.jsonObject['data'] as List<Object?>)
         .map((row) => CatalogEntity.fromJson(row! as Map<String, Object?>))

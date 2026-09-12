@@ -56,6 +56,13 @@ final class AccessRepository {
     return response.jsonObject;
   }
 
+  Future<void> remove(Record group, String reason) async {
+    await api.delete(
+      '/api/v1/admin/access/groups/${group['id']}',
+      body: {'expectedRevision': integer(group['revision']), 'reason': reason},
+    );
+  }
+
   Future<Record> assignment(String scope, String subjectId) async =>
       (await api.get('/api/v1/admin/access/$scope/$subjectId')).jsonObject;
 

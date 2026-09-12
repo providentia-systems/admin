@@ -8,10 +8,33 @@ import 'package:providentia_admin/app/admin_layout.dart';
 import 'package:providentia_admin/app/theme.dart';
 import 'package:providentia_admin/core/api/api_client.dart';
 import 'package:providentia_admin/core/auth/operator_authorization.dart';
+import 'package:providentia_admin/core/auth/session_controller.dart';
 import 'package:providentia_admin/features/workspace/operator_image.dart';
 import 'package:providentia_admin/features/workspace/operator_records_page.dart';
 
 import '../support/fake_api.dart';
+import '../support/memory_credential_store.dart';
+
+Future<SessionController> _session() async {
+  final store = MemoryCredentialStore(installationId: memoryInstallationId)
+    ..session = memoryStoredSession();
+  final session = SessionController(
+    credentialStore: store,
+    api: FakeApi(
+      (_) async => jsonResponse({
+        'userId': store.session['userId'],
+        'profile': {
+          'administratorAccess': {
+            'features': {'homes.read': true, 'audit.read': true},
+          },
+        },
+      }),
+    ),
+  );
+  await session.restore();
+  addTearDown(session.dispose);
+  return session;
+}
 
 Uint8List _png() => base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4AWP4DwABAgEAff+B1AAAAABJRU5ErkJggg==',
@@ -70,6 +93,7 @@ void main() {
             theme: buildAdminTheme(),
             home: Scaffold(
               body: OperatorRecordsPage(
+                session: await _session(),
                 api: api,
                 authorization: OperatorAuthorization.fromPermissions([
                   'audit.read',
@@ -144,6 +168,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: OperatorRecordsPage(
+              session: await _session(),
               api: api,
               authorization: OperatorAuthorization.fromPermissions([
                 'homes.read',
@@ -199,6 +224,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: OperatorRecordsPage(
+              session: await _session(),
               api: api,
               authorization: OperatorAuthorization.fromPermissions([
                 'audit.read',

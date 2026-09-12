@@ -283,4 +283,88 @@ void main() {
       );
     },
   );
+  testWidgets(
+    'unused group removal requires a reason and sends the displayed revision',
+    (tester) async {
+      var removed = false;
+      final api = FakeApi((request) async {
+        if (request.method == 'DELETE') {
+          removed = true;
+          return jsonResponse({'removed': true});
+        }
+        return jsonResponse({
+          'data': request.path.endsWith('/catalog')
+              ? [_definition]
+              : removed
+              ? []
+              : [_group()],
+        });
+      });
+      await _pump(tester, api);
+      await tester.tap(find.byTooltip('Remove group'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove').last);
+      expect(api.requests.where((r) => r.method == 'DELETE'), isEmpty);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Audit reason'),
+        'Unused duplicate configuration',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Remove').last);
+      await tester.pumpAndSettle();
+      final request = api.requests.singleWhere((r) => r.method == 'DELETE');
+      expect(request.path, '/api/v1/admin/access/groups/group-one');
+      expect(request.body, {
+        'expectedRevision': 7,
+        'reason': 'Unused duplicate configuration',
+      });
+      expect(find.text('Starter'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'conflict reloads groups and authorization failure purges visible configuration',
+    (tester) async {
+      var revision = 7;
+      var failure = 409;
+      final api = FakeApi((request) async {
+        if (request.method == 'DELETE') {
+          revision = 8;
+          throw ApiException(
+            statusCode: failure,
+            message: 'Group changed. Reload before removing.',
+          );
+        }
+        return jsonResponse({
+          'data': request.path.endsWith('/catalog')
+              ? [_definition]
+              : [
+                  {..._group(), 'revision': revision},
+                ],
+        });
+      });
+      await _pump(tester, api);
+      for (final status in [409, 403]) {
+        failure = status;
+        await tester.tap(find.byTooltip('Remove group'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Audit reason'),
+          'Unused configuration',
+        );
+        await tester.pump();
+        await tester.tap(find.text('Remove').last);
+        await tester.pumpAndSettle();
+      }
+      final revisions = api.requests
+          .where((r) => r.method == 'DELETE')
+          .map((r) => (r.body as Map)['expectedRevision']);
+      expect(revisions, [7, 8]);
+      expect(find.text('Starter'), findsNothing);
+      expect(
+        find.text('Administrator access changed. Sign in again.'),
+        findsOneWidget,
+      );
+    },
+  );
 }

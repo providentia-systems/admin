@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/admin_layout.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/operator_authorization.dart';
+import '../../core/auth/session_controller.dart';
 import '../access/access_repository.dart';
 
 final class CountryAdministrationPage extends StatefulWidget {
@@ -12,9 +13,11 @@ final class CountryAdministrationPage extends StatefulWidget {
     required this.api,
     required this.authorization,
     this.policies = false,
+    this.session,
     super.key,
   });
   final AdminApi api;
+  final SessionController? session;
   final OperatorAuthorization authorization;
   final bool policies;
   @override
@@ -28,19 +31,54 @@ class _CountryAdministrationPageState extends State<CountryAdministrationPage> {
   List<Record> _jobs = <Record>[];
   var _busy = true;
   String? _error;
+  var _generation = 0;
+  var _revoked = false;
   @override
   void initState() {
     super.initState();
+    widget.session?.addListener(_authorizationChanged);
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    widget.session?.removeListener(_authorizationChanged);
     _search.dispose();
     super.dispose();
   }
 
+  bool _authorized(int? epoch) =>
+      mounted &&
+      !_revoked &&
+      (widget.session == null ||
+          (widget.session!.phase == SessionPhase.authenticated &&
+              widget.session!.authorizationEpoch == epoch));
+
+  void _authorizationChanged() {
+    final permission = widget.policies ? 'policies.manage' : 'countries.manage';
+    if (widget.session?.phase != SessionPhase.authenticated ||
+        widget.session?.authorization.has(permission) == false) {
+      _purge();
+    }
+  }
+
+  void _purge() {
+    if (!mounted) return;
+    ++_generation;
+    _search.clear();
+    setState(() {
+      _revoked = true;
+      _rows = [];
+      _jobs = [];
+      _error = null;
+    });
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
   Future<void> _load() async {
+    if (_revoked) return;
+    final epoch = widget.session?.authorizationEpoch;
+    final generation = ++_generation;
     setState(() {
       _busy = true;
       _error = null;
@@ -60,7 +98,7 @@ class _CountryAdministrationPageState extends State<CountryAdministrationPage> {
                 '/api/v1/admin/reference-updates',
               )).jsonObject,
             );
-      if (mounted) {
+      if (_authorized(epoch) && generation == _generation) {
         setState(() {
           _rows = rows;
           _jobs = jobs;
@@ -68,7 +106,11 @@ class _CountryAdministrationPageState extends State<CountryAdministrationPage> {
         });
       }
     } on Object catch (error) {
-      if (mounted) {
+      if (error is ApiException && error.isUnauthorized) {
+        _purge();
+        return;
+      }
+      if (_authorized(epoch) && generation == _generation) {
         setState(() {
           _busy = false;
           _error = error is ApiException
@@ -80,17 +122,67 @@ class _CountryAdministrationPageState extends State<CountryAdministrationPage> {
   }
 
   Future<void> _edit([Record? row]) async {
+    final epoch = widget.session?.authorizationEpoch;
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => widget.policies
-          ? _PolicyEditor(api: widget.api, policy: row)
-          : _CountryEditor(
-              api: widget.api,
-              country: row!,
-              canReadPolicies: widget.authorization.has('policies.manage'),
-            ),
+      builder: (_) {
+        final editor = widget.policies
+            ? _PolicyEditor(api: widget.api, policy: row)
+            : _CountryEditor(
+                api: widget.api,
+                country: row!,
+                canReadPolicies: widget.authorization.has('policies.manage'),
+              );
+        final session = widget.session;
+        return session == null
+            ? editor
+            : AnimatedBuilder(
+                animation: session,
+                builder: (_, _) =>
+                    _authorized(epoch) ? editor : const SizedBox.shrink(),
+              );
+      },
     );
-    if (saved == true && mounted) await _load();
+    if (saved == true && _authorized(epoch)) await _load();
+  }
+
+  Future<void> _removePolicy(Record policy) async {
+    final epoch = widget.session?.authorizationEpoch;
+    final reason = await confirmAdministrativeRemoval(
+      context,
+      label: '${policy['title']}',
+      session: widget.session,
+      detail:
+          'Remove this unused draft? Published notices and acceptance history are retained. This removal is audited.',
+    );
+    if (reason == null || !_authorized(epoch)) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.api.delete(
+        '/api/v1/admin/privacy-policies/${policy['id']}',
+        body: {
+          'expectedRevision': integer(policy['revision']),
+          'reason': reason,
+        },
+      );
+      if (_authorized(epoch)) await _load();
+    } on Object catch (error) {
+      if (error is ApiException && error.isUnauthorized) {
+        _purge();
+        return;
+      }
+      if (!_authorized(epoch)) return;
+      await _load();
+      if (!_authorized(epoch)) return;
+      setState(
+        () => _error = error is ApiException
+            ? error.message
+            : 'The draft could not be removed. Reload before trying again.',
+      );
+    }
   }
 
   Future<void> _update() async {
@@ -114,115 +206,131 @@ class _CountryAdministrationPageState extends State<CountryAdministrationPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(24),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Text(
-          widget.policies ? 'Privacy policies' : 'Countries and locations',
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          widget.policies
-              ? 'Published notices remain as accepted. Create a new version to change a published notice, then select it in the country settings.'
-              : 'Publication, starter groups, currency and timezone are configured per country. Reference updates preserve these settings.',
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: TextField(
-                controller: _search,
-                decoration: const InputDecoration(
-                  labelText: 'Filter by name or country',
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-            const SizedBox(width: 16),
-            FilledButton.icon(
-              onPressed: _busy
-                  ? null
-                  : widget.policies
-                  ? () => _edit()
-                  : _update,
-              icon: Icon(widget.policies ? Icons.add : Icons.download),
-              label: Text(
-                widget.policies ? 'New policy' : 'Update country data',
-              ),
-            ),
-            IconButton(
-              onPressed: _busy ? null : _load,
-              tooltip: 'Reload',
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
-        ),
-        if (_jobs.isNotEmpty)
-          ExpansionTile(
-            title: Text('Latest reference update: ${_jobs.first['status']}'),
+  Widget build(BuildContext context) => _revoked
+      ? const Center(
+          child: Text('Administrator access changed. Sign in again.'),
+        )
+      : Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              for (final job in _jobs)
-                ListTile(
+              Text(
+                widget.policies
+                    ? 'Privacy policies'
+                    : 'Countries and locations',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.policies
+                    ? 'Published notices remain as accepted. Create a new version to change a published notice, then select it in the country settings.'
+                    : 'Publication, starter groups, currency and timezone are configured per country. Reference updates preserve these settings.',
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: _search,
+                      decoration: const InputDecoration(
+                        labelText: 'Filter by name or country',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  FilledButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : widget.policies
+                        ? () => _edit()
+                        : _update,
+                    icon: Icon(widget.policies ? Icons.add : Icons.download),
+                    label: Text(
+                      widget.policies ? 'New policy' : 'Update country data',
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _busy ? null : _load,
+                    tooltip: 'Reload',
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+              if (_jobs.isNotEmpty)
+                ExpansionTile(
                   title: Text(
-                    '${job['status']} · ${job['source_version'] ?? 'Version pending'}',
+                    'Latest reference update: ${_jobs.first['status']}',
                   ),
-                  subtitle: Text(
-                    '${job['created_at']} · ${job['processed_count']} records · ${job['safe_message'] ?? ''}',
-                  ),
+                  children: <Widget>[
+                    for (final job in _jobs)
+                      ListTile(
+                        title: Text(
+                          '${job['status']} · ${job['source_version'] ?? 'Version pending'}',
+                        ),
+                        subtitle: Text(
+                          '${job['created_at']} · ${job['processed_count']} records · ${job['safe_message'] ?? ''}',
+                        ),
+                      ),
+                    const ListTile(
+                      title: Text(
+                        'Country data: dr5hn/countries-states-cities-database',
+                      ),
+                      subtitle: Text(
+                        'Open Database License (ODbL). Upstream attribution is retained in the project documentation.',
+                      ),
+                    ),
+                  ],
                 ),
-              const ListTile(
-                title: Text(
-                  'Country data: dr5hn/countries-states-cities-database',
+              if (_busy) const LinearProgressIndicator(),
+              if (_error != null)
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
-                subtitle: Text(
-                  'Open Database License (ODbL). Upstream attribution is retained in the project documentation.',
+              Expanded(
+                child: ListView(
+                  children: <Widget>[
+                    for (final row in _rows.where(
+                      (row) =>
+                          '${row['name'] ?? row['title']} ${row['code'] ?? row['country_code'] ?? 'default'}'
+                              .toLowerCase()
+                              .contains(_search.text.toLowerCase()),
+                    ))
+                      ListTile(
+                        title: Text('${row['name'] ?? row['title']}'),
+                        subtitle: Text(
+                          widget.policies
+                              ? '${row['country_code'] ?? 'Shared default'} · ${row['status']} · version ${row['revision']}'
+                              : '${row['code']} · ${row['defaultCurrency']} · ${row['defaultTimezone']}',
+                        ),
+                        trailing: widget.policies
+                            ? row['status'] == 'draft'
+                                  ? IconButton(
+                                      tooltip: 'Remove draft policy',
+                                      icon: const Icon(Icons.delete_outline),
+                                      onPressed: _busy
+                                          ? null
+                                          : () => _removePolicy(row),
+                                    )
+                                  : const Icon(Icons.edit_outlined)
+                            : Chip(
+                                label: Text(
+                                  row['published'] == true ||
+                                          integer(row['published']) == 1
+                                      ? 'Published'
+                                      : 'Unpublished',
+                                ),
+                              ),
+                        onTap: () => _edit(row),
+                      ),
+                  ],
                 ),
               ),
             ],
           ),
-        if (_busy) const LinearProgressIndicator(),
-        if (_error != null)
-          Text(
-            _error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        Expanded(
-          child: ListView(
-            children: <Widget>[
-              for (final row in _rows.where(
-                (row) =>
-                    '${row['name'] ?? row['title']} ${row['code'] ?? row['country_code'] ?? 'default'}'
-                        .toLowerCase()
-                        .contains(_search.text.toLowerCase()),
-              ))
-                ListTile(
-                  title: Text('${row['name'] ?? row['title']}'),
-                  subtitle: Text(
-                    widget.policies
-                        ? '${row['country_code'] ?? 'Shared default'} · ${row['status']} · version ${row['revision']}'
-                        : '${row['code']} · ${row['defaultCurrency']} · ${row['defaultTimezone']}',
-                  ),
-                  trailing: widget.policies
-                      ? const Icon(Icons.edit_outlined)
-                      : Chip(
-                          label: Text(
-                            row['published'] == true ||
-                                    integer(row['published']) == 1
-                                ? 'Published'
-                                : 'Unpublished',
-                          ),
-                        ),
-                  onTap: () => _edit(row),
-                ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
+        );
 }
 
 class _CountryEditor extends StatefulWidget {
