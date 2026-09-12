@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/session_controller.dart';
-import 'catalog_models.dart';
 import 'catalog_maintenance_page.dart';
+import 'catalog_models.dart';
 import 'catalog_operations_page.dart';
 import 'catalog_operations_repository.dart';
 import 'catalog_repository.dart';
