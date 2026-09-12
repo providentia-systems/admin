@@ -1,6 +1,6 @@
 // GENERATED FILE - DO NOT EDIT.
 // Source: contracts/providentia-v1.json
-// Contract SHA-256: 7b1f1be5d9efd311254e9840c4595e08575e8c97d35da766dab0d291c165bcae
+// Contract SHA-256: 62612d00deaf16ba92ec29d836aa940c16e2370b9925676fe241a1d958941304
 // Home records use explicitly authorized operator endpoints; tenant mutation routes are excluded.
 
 library;
@@ -178,6 +178,11 @@ const adminApiOperations = <String, AdminApiOperation>{
     method: 'GET',
     pathTemplate: '/api/v1/catalog-contributions/review',
   ),
+  'listCatalogEntities': AdminApiOperation(
+    operationId: 'listCatalogEntities',
+    method: 'GET',
+    pathTemplate: '/api/v1/catalog-admin/entities/{entityType}',
+  ),
   'listCountryCities': AdminApiOperation(
     operationId: 'listCountryCities',
     method: 'GET',
@@ -322,6 +327,11 @@ const adminApiOperations = <String, AdminApiOperation>{
     operationId: 'revokeHomeBillingOverride',
     method: 'DELETE',
     pathTemplate: '/api/v1/operator/billing/overrides/{overrideId}',
+  ),
+  'saveCatalogEntity': AdminApiOperation(
+    operationId: 'saveCatalogEntity',
+    method: 'PUT',
+    pathTemplate: '/api/v1/catalog-admin/entities/{entityType}/{entityId}',
   ),
   'searchCatalogProducts': AdminApiOperation(
     operationId: 'searchCatalogProducts',

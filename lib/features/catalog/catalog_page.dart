@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/session_controller.dart';
 import 'catalog_models.dart';
+import 'catalog_maintenance_page.dart';
 import 'catalog_operations_page.dart';
 import 'catalog_operations_repository.dart';
 import 'catalog_repository.dart';
@@ -70,6 +71,23 @@ class _CatalogPageState extends State<CatalogPage> {
         const Text(
           'Approve consent-bound contributions and moderate attribution-free global categories and products.',
         ),
+        if (widget.canReview || widget.canCurate)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.edit_note),
+              label: const Text('Manage catalog entities'),
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => CatalogMaintenancePage(
+                    api: widget.api,
+                    session: widget.session,
+                    canCurate: widget.canCurate,
+                  ),
+                ),
+              ),
+            ),
+          ),
         const SizedBox(height: 20),
         Row(
           children: <Widget>[
