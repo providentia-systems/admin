@@ -94,7 +94,10 @@ class _CatalogPageState extends State<CatalogPage> {
             ),
           ),
         const SizedBox(height: 20),
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: <Widget>[
             SegmentedButton<_CatalogLane>(
               segments: <ButtonSegment<_CatalogLane>>[
@@ -191,7 +194,6 @@ class _CatalogPageState extends State<CatalogPage> {
                         unawaited(_load());
                       },
               ),
-            const Spacer(),
             if (_lane != _CatalogLane.operations) ...<Widget>[
               IconButton(
                 tooltip: 'Previous moderation page',
@@ -506,8 +508,9 @@ class _CatalogPageState extends State<CatalogPage> {
         _preview == null ||
         _mutating ||
         _loading ||
-        !widget.canCurate)
+        !widget.canCurate) {
       return;
+    }
     final epoch = widget.session.authorizationEpoch;
     setState(() => _mutating = true);
     try {
@@ -564,13 +567,13 @@ class _CatalogPageState extends State<CatalogPage> {
     required String title,
     required String label,
   }) async {
-    final controller = TextEditingController();
+    var value = ''; // TextField owns its controller for the route lifetime.
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
         content: TextField(
-          controller: controller,
+          onChanged: (text) => value = text,
           autofocus: true,
           minLines: 1,
           maxLines: 4,
@@ -582,13 +585,12 @@ class _CatalogPageState extends State<CatalogPage> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            onPressed: () => Navigator.pop(context, value.trim()),
             child: const Text('Confirm'),
           ),
         ],
       ),
     );
-    controller.dispose();
     return result;
   }
 
