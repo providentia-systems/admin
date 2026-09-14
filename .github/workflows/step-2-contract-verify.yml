@@ -48,7 +48,7 @@ jobs:
           dart format test/features/step_2_inventory_identity_test.dart
           git diff --check
           git rm .github/workflows/step-2-contract-verify.yml
-          git add contracts tool/materialize_contract.sh lib/generated test/features/step_2_inventory_identity_test.dart
+          git add contracts tool/materialize_contract.sh test/features/step_2_inventory_identity_test.dart
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'fix(step2): regenerate shared response contract and retain unresolved operator inventory'
