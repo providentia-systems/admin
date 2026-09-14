@@ -467,7 +467,7 @@ class _CatalogPageState extends State<CatalogPage> {
     setState(() => _mutating = true);
     try {
       final categories = await _repository.categories();
-      if (!_isAuthorized(epoch)) return;
+      if (!mounted || !_isAuthorized(epoch)) return;
       final category = await showDialog<PublishedCategory>(
         context: context,
         builder: (context) => SimpleDialog(
@@ -519,7 +519,7 @@ class _CatalogPageState extends State<CatalogPage> {
         operations: CatalogOperationsRepository(widget.api),
         title: 'Choose the product for this verified image',
       );
-      if (product == null || !_isAuthorized(epoch)) return;
+      if (!mounted || product == null || !_isAuthorized(epoch)) return;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
