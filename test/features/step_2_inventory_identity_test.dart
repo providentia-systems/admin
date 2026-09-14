@@ -31,27 +31,30 @@ void main() {
     }
   });
 
-  test('Step 2 family edits retain audit and never overwrite catalog identity', () async {
-    final api = FakeApi((request) async {
-      expect(request.method, 'PATCH');
-      expect(request.path, '/api/v1/admin/homes/$home/products/$id');
-      expect(request.body, <String, Object?>{
-        'expectedRevision': 7,
-        'reason': 'Synthetic categorization',
-        'homeCategoryId': null,
+  test(
+    'Step 2 family edits retain audit and never overwrite catalog identity',
+    () async {
+      final api = FakeApi((request) async {
+        expect(request.method, 'PATCH');
+        expect(request.path, '/api/v1/admin/homes/$home/products/$id');
+        expect(request.body, <String, Object?>{
+          'expectedRevision': 7,
+          'reason': 'Synthetic categorization',
+          'homeCategoryId': null,
+        });
+        return jsonResponse(<String, Object?>{'id': id});
       });
-      return jsonResponse(<String, Object?>{'id': id});
-    });
-    await OperatorInventoryRepository(api).saveProduct(
-      homeId: home,
-      id: id,
-      expectedRevision: 7,
-      reason: 'Synthetic categorization',
-      editMetadata: true,
-      catalogBacked: true,
-      privateName: 'Must not overwrite the family',
-      packText: 'Must not guess a replacement pack',
-    );
-    expect(api.requests, hasLength(1));
-  });
+      await OperatorInventoryRepository(api).saveProduct(
+        homeId: home,
+        id: id,
+        expectedRevision: 7,
+        reason: 'Synthetic categorization',
+        editMetadata: true,
+        catalogBacked: true,
+        privateName: 'Must not overwrite the family',
+        packText: 'Must not guess a replacement pack',
+      );
+      expect(api.requests, hasLength(1));
+    },
+  );
 }
