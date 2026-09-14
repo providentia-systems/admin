@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARCHIVE="${ROOT}/contracts/source/providentia-v1.json.gz"
 OUTPUT="${ROOT}/contracts/providentia-v1.json"
-ARCHIVE_SHA256='9550a7278a8231eb7b90ca338e8b157d2e63058dafbc1bc9b05c1e553d82af11'
+ARCHIVE_SHA256='feaba5779b8f8070c0de5d241641792ea29f44af4845302b3ea10af3d06586b8'
 OUTPUT_SHA256='f6591ae866efbcc9e661528c7f595da0d7093d959d64c66c09b0c5be1dcb7c58'
 
 sha256_file() {

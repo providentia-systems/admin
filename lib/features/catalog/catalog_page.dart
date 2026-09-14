@@ -116,16 +116,18 @@ class _CatalogPageState extends State<CatalogPage> {
                 ),
               ],
               selected: <_CatalogLane>{_lane},
-              onSelectionChanged: _mutating ? null : (selection) {
-                _clearPreview();
-                setState(() {
-                  _lane = selection.single;
-                  _offset = 0;
-                  _returnContributionId = null;
-                  _selected = null;
-                });
-                unawaited(_load());
-              },
+              onSelectionChanged: _mutating
+                  ? null
+                  : (selection) {
+                      _clearPreview();
+                      setState(() {
+                        _lane = selection.single;
+                        _offset = 0;
+                        _returnContributionId = null;
+                        _selected = null;
+                      });
+                      unawaited(_load());
+                    },
             ),
             const SizedBox(width: 16),
             if (_lane == _CatalogLane.proposals)
@@ -145,56 +147,73 @@ class _CatalogPageState extends State<CatalogPage> {
                   DropdownMenuItem(value: 'icons', child: Text('Icons')),
                   DropdownMenuItem(value: 'merges', child: Text('Merges')),
                 ],
-                onChanged: _mutating ? null : (value) {
-                  if (value == null) return;
-                  setState(() {
-                    _queue = value;
-                    _offset = 0;
-                    _selected = null;
-                  });
-                  unawaited(_load());
-                },
+                onChanged: _mutating
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _queue = value;
+                          _offset = 0;
+                          _selected = null;
+                        });
+                        unawaited(_load());
+                      },
               ),
             if (_lane == _CatalogLane.contributions)
               DropdownButton<String>(
                 key: const Key('contribution-status'),
                 value: _contributionStatus,
                 items: const <DropdownMenuItem<String>>[
-                  DropdownMenuItem(value: 'pending', child: Text('Pending review')),
-                  DropdownMenuItem(value: 'approved', child: Text('Approved / publication')),
+                  DropdownMenuItem(
+                    value: 'pending',
+                    child: Text('Pending review'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'approved',
+                    child: Text('Approved / publication'),
+                  ),
                   DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
-                  DropdownMenuItem(value: 'withdrawn', child: Text('Withdrawn')),
+                  DropdownMenuItem(
+                    value: 'withdrawn',
+                    child: Text('Withdrawn'),
+                  ),
                 ],
-                onChanged: _mutating ? null : (value) {
-                  if (value == null) return;
-                  _clearPreview();
-                  setState(() {
-                    _contributionStatus = value;
-                    _offset = 0;
-                    _selected = null;
-                  });
-                  unawaited(_load());
-                },
+                onChanged: _mutating
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        _clearPreview();
+                        setState(() {
+                          _contributionStatus = value;
+                          _offset = 0;
+                          _selected = null;
+                        });
+                        unawaited(_load());
+                      },
               ),
             const Spacer(),
             if (_lane != _CatalogLane.operations) ...<Widget>[
               IconButton(
                 tooltip: 'Previous moderation page',
-                onPressed: _loading || _mutating || _offset == 0 ? null : () {
-                  _offset -= 50;
-                  _selected = null;
-                  unawaited(_load());
-                },
+                onPressed: _loading || _mutating || _offset == 0
+                    ? null
+                    : () {
+                        _offset -= 50;
+                        _selected = null;
+                        unawaited(_load());
+                      },
                 icon: const Icon(Icons.chevron_left),
               ),
               Text('Page ${_offset ~/ 50 + 1}'),
               IconButton(
                 tooltip: 'Next moderation page',
-                onPressed: _loading || _mutating || _items.length < 50 ? null : () {
-                  _offset += 50;
-                  _selected = null;
-                  unawaited(_load());
-                },
+                onPressed: _loading || _mutating || _items.length < 50
+                    ? null
+                    : () {
+                        _offset += 50;
+                        _selected = null;
+                        unawaited(_load());
+                      },
                 icon: const Icon(Icons.chevron_right),
               ),
             ],
@@ -246,10 +265,12 @@ class _CatalogPageState extends State<CatalogPage> {
                                       '${item.kind} • revision ${item.revision}',
                                     ),
                                     trailing: Chip(label: Text(item.status)),
-                                    onTap: _loading || _mutating ? null : () {
-                                      _clearPreview();
-                                      setState(() => _selected = item);
-                                    },
+                                    onTap: _loading || _mutating
+                                        ? null
+                                        : () {
+                                            _clearPreview();
+                                            setState(() => _selected = item);
+                                          },
                                   );
                                 },
                               ),
@@ -269,8 +290,10 @@ class _CatalogPageState extends State<CatalogPage> {
                                 item: _selected!,
                                 isContribution:
                                     _lane == _CatalogLane.contributions,
-                                canReview: widget.canReview && !_loading && !_mutating,
-                                canCurate: widget.canCurate && !_loading && !_mutating,
+                                canReview:
+                                    widget.canReview && !_loading && !_mutating,
+                                canCurate:
+                                    widget.canCurate && !_loading && !_mutating,
                                 preview: _preview,
                                 onDecision: _decide,
                                 onPreview: _loadPreview,
@@ -308,9 +331,14 @@ class _CatalogPageState extends State<CatalogPage> {
       while (current()) {
         final items = lane == _CatalogLane.proposals
             ? await _repository.workbench(queue: queue, offset: offset)
-            : await _repository.contributionReview(status: status, offset: offset);
+            : await _repository.contributionReview(
+                status: status,
+                offset: offset,
+              );
         if (!current()) return;
-        final selected = items.where((item) => item.id == selectedId).firstOrNull;
+        final selected = items
+            .where((item) => item.id == selectedId)
+            .firstOrNull;
         // A just-approved item may not be on the first approved page. Seek it
         // using the existing bounded queue operation, never a private source.
         if (focusId != null && selected == null && items.length == 50) {
@@ -344,7 +372,9 @@ class _CatalogPageState extends State<CatalogPage> {
     try {
       final reason = await _textDialog(
         title: approve
-            ? (lane == _CatalogLane.proposals ? 'Approve and publish proposal' : 'Approve contribution')
+            ? (lane == _CatalogLane.proposals
+                  ? 'Approve and publish proposal'
+                  : 'Approve contribution')
             : 'Reject item',
         label: 'Auditable moderation reason',
       );
@@ -378,7 +408,11 @@ class _CatalogPageState extends State<CatalogPage> {
       }
     } on Object catch (error) {
       if (!_isAuthorized(epoch)) return;
-      _snack(error is ApiException ? _safeApiMessage(error) : 'The result could not be confirmed. Reload the current revision before retrying.');
+      _snack(
+        error is ApiException
+            ? _safeApiMessage(error)
+            : 'The result could not be confirmed. Reload the current revision before retrying.',
+      );
       // No automatic mutation retry: a lost response may already have committed.
       if (lane == _CatalogLane.contributions && approve) {
         _contributionStatus = 'approved';
@@ -399,8 +433,10 @@ class _CatalogPageState extends State<CatalogPage> {
         item.id,
         expectedRevision: item.revision,
       );
-      if (!_isAuthorized(epoch) || generation != _loadGeneration ||
-          _selected?.id != item.id || _selected?.revision != item.revision) {
+      if (!_isAuthorized(epoch) ||
+          generation != _loadGeneration ||
+          _selected?.id != item.id ||
+          _selected?.revision != item.revision) {
         preview.dispose();
         return;
       }
@@ -408,7 +444,9 @@ class _CatalogPageState extends State<CatalogPage> {
       setState(() => _preview = preview);
     } on Object {
       if (_isAuthorized(epoch)) {
-        _snack('The moderation preview failed safety validation. Reload the item before trying again.');
+        _snack(
+          'The moderation preview failed safety validation. Reload the item before trying again.',
+        );
       }
     }
   }
@@ -432,10 +470,14 @@ class _CatalogPageState extends State<CatalogPage> {
         context: context,
         builder: (context) => SimpleDialog(
           title: const Text('Select published category'),
-          children: categories.map((entry) => SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, entry),
-            child: Text(entry.canonicalName),
-          )).toList(growable: false),
+          children: categories
+              .map(
+                (entry) => SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, entry),
+                  child: Text(entry.canonicalName),
+                ),
+              )
+              .toList(growable: false),
         ),
       );
       if (category == null || !_isAuthorized(epoch)) return;
@@ -447,7 +489,11 @@ class _CatalogPageState extends State<CatalogPage> {
       if (_isAuthorized(epoch)) await _load(focusId: item.id);
     } on Object catch (error) {
       if (!_isAuthorized(epoch)) return;
-      _snack(error is ApiException ? _safeApiMessage(error) : 'The proposal result could not be confirmed. The current contribution was reloaded.');
+      _snack(
+        error is ApiException
+            ? _safeApiMessage(error)
+            : 'The proposal result could not be confirmed. The current contribution was reloaded.',
+      );
       await _load(focusId: item.id);
     } finally {
       if (_isAuthorized(epoch)) setState(() => _mutating = false);
@@ -456,7 +502,12 @@ class _CatalogPageState extends State<CatalogPage> {
 
   Future<void> _publishImage() async {
     final item = _selected;
-    if (item == null || _preview == null || _mutating || _loading || !widget.canCurate) return;
+    if (item == null ||
+        _preview == null ||
+        _mutating ||
+        _loading ||
+        !widget.canCurate)
+      return;
     final epoch = widget.session.authorizationEpoch;
     setState(() => _mutating = true);
     try {
@@ -476,7 +527,10 @@ class _CatalogPageState extends State<CatalogPage> {
             'revision ${product.currentIconRevision}?',
           ),
           actions: <Widget>[
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
             FilledButton(
               key: const Key('confirm-image-publication'),
               onPressed: () => Navigator.pop(context, true),
@@ -495,7 +549,11 @@ class _CatalogPageState extends State<CatalogPage> {
       if (_isAuthorized(epoch)) await _load(focusId: item.id);
     } on Object catch (error) {
       if (!_isAuthorized(epoch)) return;
-      _snack(error is ApiException ? _safeApiMessage(error) : 'Publication could not be confirmed. The current contribution was reloaded.');
+      _snack(
+        error is ApiException
+            ? _safeApiMessage(error)
+            : 'Publication could not be confirmed. The current contribution was reloaded.',
+      );
       await _load(focusId: item.id);
     } finally {
       if (_isAuthorized(epoch)) setState(() => _mutating = false);
@@ -637,11 +695,13 @@ final class CatalogModerationDetail extends StatelessWidget {
         ],
         if (approvedContribution && !storePriceContribution) ...<Widget>[
           const SizedBox(height: 12),
-          Text(productIdentityContribution
-              ? 'Contribution approved. ${item.linkedProposalId == null ? 'Not published: link a product proposal next.' : 'Linked proposal: ${item.linkedProposalStatus}. Only curator approval of that proposal publishes the product.'}'
-              : item.imagePublished
-                  ? 'Verified image published to the selected product.'
-                  : 'Contribution approved, not published. Load the approved-revision preview before selecting the product.'),
+          Text(
+            productIdentityContribution
+                ? 'Contribution approved. ${item.linkedProposalId == null ? 'Not published: link a product proposal next.' : 'Linked proposal: ${item.linkedProposalStatus}. Only curator approval of that proposal publishes the product.'}'
+                : item.imagePublished
+                ? 'Verified image published to the selected product.'
+                : 'Contribution approved, not published. Load the approved-revision preview before selecting the product.',
+          ),
         ],
         const Divider(height: 32),
         if (canReview && item.status == 'pending')
@@ -650,7 +710,9 @@ final class CatalogModerationDetail extends StatelessWidget {
             children: <Widget>[
               FilledButton.icon(
                 key: const Key('approve-moderation-item'),
-                onPressed: isContribution || canCurate ? () => onDecision(true) : null,
+                onPressed: isContribution || canCurate
+                    ? () => onDecision(true)
+                    : null,
                 icon: const Icon(Icons.check),
                 label: Text(isContribution ? 'Approve' : 'Approve and publish'),
               ),
@@ -679,13 +741,23 @@ final class CatalogModerationDetail extends StatelessWidget {
               if (productIdentityContribution)
                 OutlinedButton(
                   key: const Key('link-product-proposal'),
-                  onPressed: item.linkedProposalStatus == 'approved' || item.linkedProposalStatus == 'rejected' ? null : onLinkProposal,
-                  child: Text(item.linkedProposalId == null ? 'Link product proposal' : 'Review linked proposal'),
+                  onPressed:
+                      item.linkedProposalStatus == 'approved' ||
+                          item.linkedProposalStatus == 'rejected'
+                      ? null
+                      : onLinkProposal,
+                  child: Text(
+                    item.linkedProposalId == null
+                        ? 'Link product proposal'
+                        : 'Review linked proposal',
+                  ),
                 ),
               if (imageContribution)
                 FilledButton.tonal(
                   key: const Key('publish-verified-image'),
-                  onPressed: preview == null || item.imagePublished ? null : onPublishImage,
+                  onPressed: preview == null || item.imagePublished
+                      ? null
+                      : onPublishImage,
                   child: const Text('Publish verified image'),
                 ),
             ],
