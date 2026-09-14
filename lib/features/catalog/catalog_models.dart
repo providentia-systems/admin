@@ -61,7 +61,11 @@ final class CatalogQueueItem {
     return CatalogQueueItem(
       id: firstString(const ['id', 'proposalId', 'contributionId'], 'unknown'),
       revision: revision,
-      status: firstString(const ['status', 'moderationStatus', 'decision'], 'pending'),
+      status: firstString(const [
+        'status',
+        'moderationStatus',
+        'decision',
+      ], 'pending'),
       kind: kind,
       title:
           storePrice?.title ??
@@ -79,14 +83,36 @@ final class CatalogQueueItem {
   /// Only the backend's attribution-free moderation projection may reach a
   /// catalog screen. Unknown and nested household fields fail closed.
   static Map<String, Object?> _contributionProjection(
-    Map<String, Object?> json, String kind,
+    Map<String, Object?> json,
+    String kind,
   ) {
-    const top = <String>{'id', 'contributionType', 'payload', 'status',
-      'revision', 'consentNoticeVersion', 'consentRevision', 'createdAt',
-      'proposalLink', 'imagePublication'};
-    const identity = <String>{'canonicalName', 'brand', 'categoryLabel', 'barcode', 'packText'};
-    const image = <String>{'assetDigest', 'mediaType', 'altText', 'provenance',
-      'rightsDeclarationVersion', 'reuseNoticeVersion'};
+    const top = <String>{
+      'id',
+      'contributionType',
+      'payload',
+      'status',
+      'revision',
+      'consentNoticeVersion',
+      'consentRevision',
+      'createdAt',
+      'proposalLink',
+      'imagePublication',
+    };
+    const identity = <String>{
+      'canonicalName',
+      'brand',
+      'categoryLabel',
+      'barcode',
+      'packText',
+    };
+    const image = <String>{
+      'assetDigest',
+      'mediaType',
+      'altText',
+      'provenance',
+      'rightsDeclarationVersion',
+      'reuseNoticeVersion',
+    };
     final payload = json['payload'];
     final fields = switch (kind) {
       'product_identity' => identity,
@@ -94,23 +120,42 @@ final class CatalogQueueItem {
       'store_price' => StorePriceModeration.allowedWireFields,
       _ => throw const FormatException('Unknown contribution type.'),
     };
-    if (!top.containsAll(json.keys) || payload is! Map<String, Object?> ||
+    if (!top.containsAll(json.keys) ||
+        payload is! Map<String, Object?> ||
         !fields.containsAll(payload.keys) ||
         payload.values.any((value) => value != null && value is! String)) {
       throw const FormatException('Unsafe catalog contribution projection.');
     }
     void checkLink(String key, Set<String> keys) {
       final link = json[key];
-      if (link != null && (link is! Map<String, Object?> ||
-          !keys.containsAll(link.keys) ||
-          link.values.any((value) => value != null && value is! String && value is! int))) {
+      if (link != null &&
+          (link is! Map<String, Object?> ||
+              !keys.containsAll(link.keys) ||
+              link.values.any(
+                (value) => value != null && value is! String && value is! int,
+              ))) {
         throw const FormatException('Unsafe catalog publication projection.');
       }
     }
-    checkLink('proposalLink', const <String>{'contributionId', 'contributionRevision',
-      'proposalId', 'proposalStatus', 'publishedCategoryId', 'publishedCategoryName', 'linkedAt'});
-    checkLink('imagePublication', const <String>{'contributionId', 'contributionRevision',
-      'productId', 'productName', 'iconId', 'iconRevision', 'publishedAt'});
+
+    checkLink('proposalLink', const <String>{
+      'contributionId',
+      'contributionRevision',
+      'proposalId',
+      'proposalStatus',
+      'publishedCategoryId',
+      'publishedCategoryName',
+      'linkedAt',
+    });
+    checkLink('imagePublication', const <String>{
+      'contributionId',
+      'contributionRevision',
+      'productId',
+      'productName',
+      'iconId',
+      'iconRevision',
+      'publishedAt',
+    });
     return Map<String, Object?>.unmodifiable(json);
   }
 
@@ -124,10 +169,11 @@ final class CatalogQueueItem {
 
   Map<String, Object?>? get proposalLink =>
       raw['proposalLink'] is Map<String, Object?>
-          ? raw['proposalLink']! as Map<String, Object?>
-          : null;
+      ? raw['proposalLink']! as Map<String, Object?>
+      : null;
   String? get linkedProposalId => proposalLink?['proposalId'] as String?;
-  String? get linkedProposalStatus => proposalLink?['proposalStatus'] as String?;
+  String? get linkedProposalStatus =>
+      proposalLink?['proposalStatus'] as String?;
   bool get imagePublished => raw['imagePublication'] is Map<String, Object?>;
 
   bool get isProductIdentityContribution => kind == 'product_identity';
