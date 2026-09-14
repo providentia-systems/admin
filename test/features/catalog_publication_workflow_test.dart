@@ -51,8 +51,9 @@ void main() {
           approved = true;
           return jsonResponse({});
         }
-        if (request.path.endsWith('/workbench'))
+        if (request.path.endsWith('/workbench')) {
           return jsonResponse({'data': <Object?>[]});
+        }
         expect(request.path, '/api/v1/catalog-contributions/review');
         expect(request.query?['status'], approved ? 'approved' : 'pending');
         return jsonResponse({
