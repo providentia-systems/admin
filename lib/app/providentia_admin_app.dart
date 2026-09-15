@@ -27,6 +27,10 @@ final class ProvidentiaAdminApp extends StatelessWidget {
       animation: session,
       builder: (context, _) => switch (session.phase) {
         SessionPhase.restoring => const _RestoringPage(),
+        SessionPhase.temporarilyUnavailable ||
+        SessionPhase.reauthenticationRequired => _RecoveryPage(
+          session: session,
+        ),
         SessionPhase.signedOut ||
         SessionPhase.loginPending => LoginPage(session: session),
         SessionPhase.authenticated =>
@@ -97,6 +101,43 @@ final class _ApprovalPendingPage extends StatelessWidget {
               FilledButton(
                 onPressed: session.reloadProfile,
                 child: const Text('Check access'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+final class _RecoveryPage extends StatelessWidget {
+  const _RecoveryPage({required this.session});
+  final SessionController session;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Session recovery')),
+    body: Center(
+      child: SizedBox(
+        width: 520,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                session.error ??
+                    'The session must be restored before continuing.',
+              ),
+              const SizedBox(height: 16),
+              if (session.phase == SessionPhase.temporarilyUnavailable)
+                FilledButton(
+                  onPressed: session.restore,
+                  child: const Text('Retry connection'),
+                ),
+              TextButton(
+                onPressed: session.signOut,
+                child: const Text('Sign in again'),
               ),
             ],
           ),

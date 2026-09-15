@@ -362,7 +362,9 @@ void main() {
       expect(revisions, [7, 8]);
       expect(find.text('Starter'), findsNothing);
       expect(
-        find.text('Administrator access changed. Sign in again.'),
+        find.text(
+          'Access to this page changed. Refresh your permissions to continue.',
+        ),
         findsOneWidget,
       );
     },

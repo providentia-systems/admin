@@ -368,7 +368,9 @@ void main() {
       expect(find.text('Privacy notice'), findsNothing);
       expect(find.widgetWithText(TextField, 'Audit reason'), findsNothing);
       expect(
-        find.text('Administrator access changed. Sign in again.'),
+        find.text(
+          'Access to this page changed. Refresh your permissions to continue.',
+        ),
         findsOneWidget,
       );
     },

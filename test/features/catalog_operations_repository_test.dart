@@ -127,7 +127,7 @@ void main() {
           isA<CatalogOperationsFailure>().having(
             (failure) => failure.safeMessage,
             'safeMessage',
-            'Catalog data could not be read safely.',
+            'The server returned invalid catalog data. Reload or report the request code.',
           ),
         ),
       );

@@ -9,6 +9,7 @@ import 'catalog_models.dart';
 import 'catalog_operations_page.dart';
 import 'catalog_operations_repository.dart';
 import 'catalog_repository.dart';
+import 'published_category_picker.dart';
 import 'published_product_picker.dart';
 
 enum _CatalogLane { proposals, contributions, operations }
@@ -37,6 +38,7 @@ class _CatalogPageState extends State<CatalogPage> {
   var _queue = 'proposals';
   var _contributionStatus = 'pending';
   var _offset = 0;
+  final _pageAnchors = <String>[''];
   var _loadGeneration = 0;
   var _mutating = false;
   String? _returnContributionId;
@@ -126,6 +128,9 @@ class _CatalogPageState extends State<CatalogPage> {
                       setState(() {
                         _lane = selection.single;
                         _offset = 0;
+                        _pageAnchors
+                          ..clear()
+                          ..add('');
                         _returnContributionId = null;
                         _selected = null;
                       });
@@ -157,6 +162,12 @@ class _CatalogPageState extends State<CatalogPage> {
                         setState(() {
                           _queue = value;
                           _offset = 0;
+                          _pageAnchors
+                            ..clear()
+                            ..add('');
+                          _pageAnchors
+                            ..clear()
+                            ..add('');
                           _selected = null;
                         });
                         unawaited(_load());
@@ -189,6 +200,12 @@ class _CatalogPageState extends State<CatalogPage> {
                         setState(() {
                           _contributionStatus = value;
                           _offset = 0;
+                          _pageAnchors
+                            ..clear()
+                            ..add('');
+                          _pageAnchors
+                            ..clear()
+                            ..add('');
                           _selected = null;
                         });
                         unawaited(_load());
@@ -206,12 +223,17 @@ class _CatalogPageState extends State<CatalogPage> {
                       },
                 icon: const Icon(Icons.chevron_left),
               ),
-              Text('Page ${_offset ~/ 50 + 1}'),
+              Text('Page ${_offset ~/ 50 + 1} • partial live list'),
               IconButton(
                 tooltip: 'Next moderation page',
                 onPressed: _loading || _mutating || _items.length < 50
                     ? null
                     : () {
+                        _pageAnchors.removeRange(
+                          _offset ~/ 50 + 1,
+                          _pageAnchors.length,
+                        );
+                        _pageAnchors.add(_items.last.id);
                         _offset += 50;
                         _selected = null;
                         unawaited(_load());
@@ -221,8 +243,16 @@ class _CatalogPageState extends State<CatalogPage> {
             ],
             if (_lane != _CatalogLane.operations)
               IconButton.filledTonal(
-                tooltip: 'Refresh moderation queue',
-                onPressed: _loading || _mutating ? null : () => _load(),
+                tooltip: 'Refresh moderation queue from the beginning',
+                onPressed: _loading || _mutating
+                    ? null
+                    : () {
+                        _offset = 0;
+                        _pageAnchors
+                          ..clear()
+                          ..add('');
+                        unawaited(_load());
+                      },
                 icon: const Icon(Icons.refresh),
               ),
           ],
@@ -253,7 +283,13 @@ class _CatalogPageState extends State<CatalogPage> {
                       flex: 2,
                       child: Card(
                         child: _items.isEmpty
-                            ? const Center(child: Text('This queue is empty.'))
+                            ? Center(
+                                child: Text(
+                                  _hasError
+                                      ? 'The queue is unavailable, not empty. Retry to load it.'
+                                      : 'This page is empty. Refresh for new or moved records.',
+                                ),
+                              )
                             : ListView.separated(
                                 itemCount: _items.length,
                                 separatorBuilder: (_, _) =>
@@ -320,6 +356,11 @@ class _CatalogPageState extends State<CatalogPage> {
     final queue = _queue;
     final selectedId = focusId ?? _selected?.id;
     var offset = focusId == null ? _offset : 0;
+    if (focusId != null) {
+      _pageAnchors
+        ..clear()
+        ..add('');
+    }
     _clearPreview();
     setState(() {
       _selected = null;
@@ -332,10 +373,13 @@ class _CatalogPageState extends State<CatalogPage> {
     try {
       while (current()) {
         final items = lane == _CatalogLane.proposals
-            ? await _repository.workbench(queue: queue, offset: offset)
+            ? await _repository.workbench(
+                queue: queue,
+                afterId: _pageAnchors[offset ~/ 50],
+              )
             : await _repository.contributionReview(
                 status: status,
-                offset: offset,
+                afterId: _pageAnchors[offset ~/ 50],
               );
         if (!current()) return;
         final selected = items
@@ -344,6 +388,7 @@ class _CatalogPageState extends State<CatalogPage> {
         // A just-approved item may not be on the first approved page. Seek it
         // using the existing bounded queue operation, never a private source.
         if (focusId != null && selected == null && items.length == 50) {
+          _pageAnchors.add(items.last.id);
           offset += 50;
           continue;
         }
@@ -466,21 +511,10 @@ class _CatalogPageState extends State<CatalogPage> {
     final epoch = widget.session.authorizationEpoch;
     setState(() => _mutating = true);
     try {
-      final categories = await _repository.categories();
-      if (!mounted || !_isAuthorized(epoch)) return;
-      final category = await showDialog<PublishedCategory>(
+      final category = await showPublishedCategoryPicker(
         context: context,
-        builder: (context) => SimpleDialog(
-          title: const Text('Select published category'),
-          children: categories
-              .map(
-                (entry) => SimpleDialogOption(
-                  onPressed: () => Navigator.pop(context, entry),
-                  child: Text(entry.canonicalName),
-                ),
-              )
-              .toList(growable: false),
-        ),
+        loadPage: (query, afterId) =>
+            _repository.categories(query: query, limit: 50, afterId: afterId),
       );
       if (category == null || !_isAuthorized(epoch)) return;
       await _repository.linkContributionProposal(
