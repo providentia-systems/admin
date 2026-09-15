@@ -35,6 +35,7 @@ final class SecureCredentialStore implements CredentialStore {
     'idleExpiresAt',
     'refreshIdleTtlSeconds',
     'transport',
+    'refreshState',
   ];
   static const _pendingKeys = <String>[
     'challengeId',

@@ -9,6 +9,7 @@ import 'catalog_models.dart';
 import 'catalog_operations_models.dart';
 import 'catalog_operations_repository.dart';
 import 'catalog_product_inspection.dart';
+import 'published_category_picker.dart';
 import 'published_product_picker.dart';
 
 enum _OperationsSection { identities, conflicts, merges }
@@ -37,6 +38,12 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
   late final CatalogOperationsPort _operations;
   late _OperationsSection _section;
   var _conflictQueue = 'duplicates';
+  final _conflictAnchors = <String>[''];
+  final _mergeAnchors = <String>[''];
+  var _conflictPage = 0;
+  var _mergePage = 0;
+  var _conflictGeneration = 0;
+  var _mergeGeneration = 0;
   var _loading = false;
   String? _safeMessage;
   List<CatalogConflict> _conflicts = const <CatalogConflict>[];
@@ -241,14 +248,29 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
                 ? null
                 : (value) {
                     if (value == null) return;
-                    setState(() => _conflictQueue = value);
+                    setState(() {
+                      _conflictQueue = value;
+                      _conflictPage = 0;
+                      _conflictAnchors
+                        ..clear()
+                        ..add('');
+                    });
                     unawaited(_loadConflicts());
                   },
           ),
           const Spacer(),
+          _pagination(merges: false),
           IconButton.filledTonal(
             tooltip: 'Reload conflicts',
-            onPressed: _loading ? null : _loadConflicts,
+            onPressed: _loading
+                ? null
+                : () {
+                    _conflictPage = 0;
+                    _conflictAnchors
+                      ..clear()
+                      ..add('');
+                    unawaited(_loadConflicts());
+                  },
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -394,12 +416,21 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
                     const Spacer(),
                     IconButton(
                       tooltip: 'Reload merge history',
-                      onPressed: _loading ? null : _loadMergeEvents,
+                      onPressed: _loading
+                          ? null
+                          : () {
+                              _mergePage = 0;
+                              _mergeAnchors
+                                ..clear()
+                                ..add('');
+                              unawaited(_loadMergeEvents());
+                            },
                       icon: const Icon(Icons.refresh),
                     ),
                   ],
                 ),
               ),
+              _pagination(merges: true),
               const Divider(height: 1),
               Expanded(
                 child: _mergeEvents.isEmpty
@@ -440,6 +471,43 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
     ],
   );
 
+  Widget _pagination({required bool merges}) {
+    final page = merges ? _mergePage : _conflictPage;
+    final anchors = merges ? _mergeAnchors : _conflictAnchors;
+    final count = merges ? _mergeEvents.length : _conflicts.length;
+    final name = merges ? 'merge history' : 'conflict';
+    void move(bool forward) {
+      if (forward) {
+        anchors.removeRange(page + 1, anchors.length);
+        anchors.add(merges ? _mergeEvents.last.id : _conflicts.last.id);
+      }
+      if (merges) {
+        _mergePage += forward ? 1 : -1;
+        unawaited(_loadMergeEvents());
+      } else {
+        _conflictPage += forward ? 1 : -1;
+        unawaited(_loadConflicts());
+      }
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconButton(
+          tooltip: 'Previous $name page',
+          onPressed: _loading || page == 0 ? null : () => move(false),
+          icon: const Icon(Icons.chevron_left),
+        ),
+        Text('Page ${page + 1} • partial list'),
+        IconButton(
+          tooltip: 'Next $name page',
+          onPressed: _loading || count < 50 ? null : () => move(true),
+          icon: const Icon(Icons.chevron_right),
+        ),
+      ],
+    );
+  }
+
   Future<void> _manageProduct(CatalogProductDetail product) async {
     final epoch = widget.session.authorizationEpoch;
     await Navigator.of(context).push<void>(
@@ -476,9 +544,10 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
   }
 
   Future<void> _chooseCategory() async {
-    final category = await showDialog<PublishedCategory>(
+    final category = await showPublishedCategoryPicker(
       context: context,
-      builder: (_) => _PublishedCategoryPicker(operations: _operations),
+      loadPage: (query, afterId) =>
+          _operations.searchCategories(query, limit: 50, afterId: afterId),
     );
     if (mounted && category != null) {
       setState(() => _selectedCategory = category);
@@ -513,19 +582,27 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
 
   Future<void> _loadConflicts() async {
     final epoch = widget.session.authorizationEpoch;
+    final generation = ++_conflictGeneration;
     _begin();
     try {
-      final conflicts = await _operations.conflicts(_conflictQueue);
-      if (_authorized(epoch)) {
+      final conflicts = await _operations.conflicts(
+        _conflictQueue,
+        afterId: _conflictAnchors[_conflictPage],
+      );
+      if (_authorized(epoch) && generation == _conflictGeneration) {
         setState(() {
           _conflicts = conflicts;
           _loading = false;
         });
       }
     } on CatalogOperationsFailure catch (failure) {
-      if (_authorized(epoch)) _fail(failure.safeMessage);
+      if (_authorized(epoch) && generation == _conflictGeneration) {
+        _fail(failure.safeMessage);
+      }
     } on Object {
-      if (_authorized(epoch)) _fail('Catalog conflicts could not be loaded.');
+      if (_authorized(epoch) && generation == _conflictGeneration) {
+        _fail('Catalog conflicts could not be loaded.');
+      }
     }
   }
 
@@ -640,19 +717,26 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
 
   Future<void> _loadMergeEvents() async {
     final epoch = widget.session.authorizationEpoch;
+    final generation = ++_mergeGeneration;
     _begin();
     try {
-      final events = await _operations.mergeEvents();
-      if (_authorized(epoch)) {
+      final events = await _operations.mergeEvents(
+        afterId: _mergeAnchors[_mergePage],
+      );
+      if (_authorized(epoch) && generation == _mergeGeneration) {
         setState(() {
           _mergeEvents = events;
           _loading = false;
         });
       }
     } on CatalogOperationsFailure catch (failure) {
-      if (_authorized(epoch)) _fail(failure.safeMessage);
+      if (_authorized(epoch) && generation == _mergeGeneration) {
+        _fail(failure.safeMessage);
+      }
     } on Object {
-      if (_authorized(epoch)) _fail('Merge history could not be loaded.');
+      if (_authorized(epoch) && generation == _mergeGeneration) {
+        _fail('Merge history could not be loaded.');
+      }
     }
   }
 
@@ -736,106 +820,6 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
       mounted &&
       widget.session.phase == SessionPhase.authenticated &&
       widget.session.authorizationEpoch == epoch;
-}
-
-final class _PublishedCategoryPicker extends StatefulWidget {
-  const _PublishedCategoryPicker({required this.operations});
-
-  final CatalogOperationsPort operations;
-
-  @override
-  State<_PublishedCategoryPicker> createState() =>
-      _PublishedCategoryPickerState();
-}
-
-class _PublishedCategoryPickerState extends State<_PublishedCategoryPicker> {
-  final _query = TextEditingController();
-  List<PublishedCategory>? _categories;
-  String? _safeMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_load());
-  }
-
-  @override
-  void dispose() {
-    _query.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Published categories'),
-    content: SizedBox(
-      width: 620,
-      height: 460,
-      child: Column(
-        children: <Widget>[
-          TextField(
-            key: const Key('category-search-query'),
-            controller: _query,
-            decoration: const InputDecoration(
-              labelText: 'Canonical category name',
-              prefixIcon: Icon(Icons.search),
-            ),
-            onSubmitted: (_) => _load(),
-          ),
-          if (_safeMessage case final message?) Text(message),
-          const SizedBox(height: 8),
-          Expanded(
-            child: _categories == null
-                ? const Center(child: CircularProgressIndicator())
-                : ListView.separated(
-                    itemCount: _categories!.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final category = _categories![index];
-                      return ListTile(
-                        key: Key('published-category-${category.id}'),
-                        title: Text(category.canonicalName),
-                        subtitle: Text('Revision ${category.revision}'),
-                        onTap: () => Navigator.pop(context, category),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    ),
-    actions: <Widget>[
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Close'),
-      ),
-    ],
-  );
-
-  Future<void> _load() async {
-    setState(() {
-      _categories = null;
-      _safeMessage = null;
-    });
-    try {
-      final categories = await widget.operations.searchCategories(_query.text);
-      if (mounted) setState(() => _categories = categories);
-    } on CatalogOperationsFailure catch (failure) {
-      if (mounted) {
-        setState(() {
-          _categories = const <PublishedCategory>[];
-          _safeMessage = failure.safeMessage;
-        });
-      }
-    } on Object {
-      if (mounted) {
-        setState(() {
-          _categories = const <PublishedCategory>[];
-          _safeMessage = 'Published categories could not be loaded safely.';
-        });
-      }
-    }
-  }
 }
 
 final class _CatalogIconDialog extends StatefulWidget {

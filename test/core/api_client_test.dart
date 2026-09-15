@@ -26,36 +26,46 @@ void main() {
     expect(observed.url.path, '/api/v1/me');
   });
 
-  test('invokes fail-closed callback before exposing a 403', () async {
-    var lost = false;
-    final refreshRequests = <bool>[];
-    final client = ApiClient(
-      baseUri: Uri.parse('https://api.example.test'),
-      httpClient: MockClient(
-        (_) async => http.Response(
-          jsonEncode(<String, Object?>{'detail': 'Forbidden'}),
-          403,
-          headers: const <String, String>{'content-type': 'application/json'},
+  test(
+    'retains session and refreshes capabilities before exposing a 403',
+    () async {
+      var lost = false;
+      var forbidden = false;
+      final refreshRequests = <bool>[];
+      final client = ApiClient(
+        baseUri: Uri.parse('https://api.example.test'),
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode(<String, Object?>{'detail': 'Forbidden'}),
+            403,
+            headers: const <String, String>{'content-type': 'application/json'},
+          ),
         ),
-      ),
-      accessTokenProvider: () => 'token',
-      ensureAccessToken: ({required force}) async {
-        refreshRequests.add(force);
-        return true;
-      },
-      onAuthorizationLost: () => lost = true,
-    );
+        accessTokenProvider: () => 'token',
+        ensureAccessToken: ({required force}) async {
+          refreshRequests.add(force);
+          return true;
+        },
+        onAuthorizationLost: () => lost = true,
+        onResourceForbidden: () => forbidden = true,
+      );
 
-    try {
-      await client.get('/api/v1/admin/accounts');
-      fail('request should fail');
-    } on ApiException catch (error) {
-      expect(lost, isTrue);
-      expect(error.statusCode, 403);
-      expect(error.message, 'Forbidden');
-    }
-    expect(refreshRequests, <bool>[false]);
-  });
+      try {
+        await client.get('/api/v1/admin/accounts');
+        fail('request should fail');
+      } on ApiException catch (error) {
+        expect(lost, isFalse);
+        expect(forbidden, isTrue);
+        expect(error.statusCode, 403);
+        expect(
+          error.message,
+          'You no longer have permission for this action. Refresh permissions.',
+        );
+        expect(error.problem, isNot(contains('detail')));
+      }
+      expect(refreshRequests, <bool>[false]);
+    },
+  );
 
   test('refreshes once and retries a rejected authenticated request', () async {
     var token = 'initial-access-token';

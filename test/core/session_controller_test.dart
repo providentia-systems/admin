@@ -714,9 +714,14 @@ void main() {
 
     expect(await controller.ensureFreshAccessToken(force: true), isFalse);
 
-    expect(controller.phase, SessionPhase.signedOut);
+    expect(controller.phase, SessionPhase.temporarilyUnavailable);
     expect(controller.accessToken, isNull);
-    expect(store.session, isEmpty);
+    expect(store.session['refreshToken'], 'refresh-token');
+    expect(
+      api.requests.where((request) => request.path == '/api/v1/auth/refresh'),
+      isEmpty,
+    );
+    expect(controller.authorization.isOperator, isFalse);
   });
 
   test('invalid refresh response purges the native session', () async {
@@ -778,8 +783,14 @@ void main() {
 
       expect(await controller.ensureFreshAccessToken(force: true), isFalse);
 
-      expect(controller.phase, SessionPhase.signedOut);
-      expect(store.session, isEmpty);
+      expect(controller.phase, SessionPhase.reauthenticationRequired);
+      expect(controller.accessToken, isNull);
+      expect(controller.authorization.isOperator, isFalse);
+      expect(store.session['refreshToken'], 'refresh-token');
+      expect(store.session['refreshState'], 'pending');
+      final attempts = api.requests.length;
+      expect(await controller.ensureFreshAccessToken(force: true), isFalse);
+      expect(api.requests.length, attempts);
     },
   );
 

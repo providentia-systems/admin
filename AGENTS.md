@@ -7,8 +7,10 @@ OpenAPI lock before changing runtime behavior.
   platforms or reuse homeowner storage, database, installation, or credentials.
 - The backend owns authorization and domain rules. UI visibility is defense in
   depth; every privileged request must remain backend-authorized.
-- A 401 or 403 from a privileged request must synchronously purge navigation,
-  cached privileged state and capabilities before asynchronous cleanup.
+- Confirmed invalid/revoked sessions purge credentials and privileged views.
+  Resource-level 403 responses invalidate stale views and reload capabilities
+  without destroying a valid identity. Ambiguous refresh outcomes require safe
+  reauthentication; never replay a possibly rotated refresh credential.
 - The system owner may inspect all application data and delegate access through
   administrator groups. Use dedicated operator endpoints authorized by the
   backend. Viewing household records is independent of public catalog sharing.

@@ -14,13 +14,14 @@ final class CatalogRepository {
     String queue = 'proposals',
     int limit = 50,
     int offset = 0,
+    String? afterId,
   }) async {
     final response = await _api.get(
       '/api/v1/catalog-admin/workbench',
       query: <String, String>{
         'queue': queue,
         'limit': '$limit',
-        'offset': '$offset',
+        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
       },
     );
     return _items(response.jsonObject['data']);
@@ -30,13 +31,14 @@ final class CatalogRepository {
     String? status,
     int limit = 50,
     int offset = 0,
+    String? afterId,
   }) async {
     final response = await _api.get(
       '/api/v1/catalog-contributions/review',
       query: <String, String>{
         'status': ?status,
         'limit': '$limit',
-        'offset': '$offset',
+        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
       },
     );
     return _items(response.jsonObject['data']);
@@ -74,19 +76,27 @@ final class CatalogRepository {
     );
   }
 
-  Future<List<PublishedCategory>> categories({String query = ''}) async {
+  Future<List<PublishedCategory>> categories({
+    String query = '',
+    int limit = 100,
+    int offset = 0,
+    String? afterId,
+  }) async {
     final response = await _api.get(
       '/api/v1/catalog/categories',
       query: <String, String>{
         if (query.trim().isNotEmpty) 'q': query.trim(),
-        'limit': '100',
-        'offset': '0',
+        'limit': '$limit',
+        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
       },
     );
     final data = response.jsonObject['data'];
-    if (data is! List<Object?>) return const <PublishedCategory>[];
+    if (data is! List<Object?> ||
+        data.any((item) => item is! Map<String, Object?>)) {
+      throw const FormatException('Invalid catalog category list.');
+    }
     return List<PublishedCategory>.unmodifiable(
-      data.whereType<Map<String, Object?>>().map(PublishedCategory.fromJson),
+      data.cast<Map<String, Object?>>().map(PublishedCategory.fromJson),
     );
   }
 
@@ -154,9 +164,12 @@ final class CatalogRepository {
   }
 
   static List<CatalogQueueItem> _items(Object? data) {
-    if (data is! List<Object?>) return const <CatalogQueueItem>[];
+    if (data is! List<Object?> ||
+        data.any((item) => item is! Map<String, Object?>)) {
+      throw const FormatException('Invalid catalog queue response.');
+    }
     return List<CatalogQueueItem>.unmodifiable(
-      data.whereType<Map<String, Object?>>().map(CatalogQueueItem.fromJson),
+      data.cast<Map<String, Object?>>().map(CatalogQueueItem.fromJson),
     );
   }
 

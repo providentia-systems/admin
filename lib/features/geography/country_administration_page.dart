@@ -106,7 +106,8 @@ class _CountryAdministrationPageState extends State<CountryAdministrationPage> {
         });
       }
     } on Object catch (error) {
-      if (error is ApiException && error.isUnauthorized) {
+      if (error is ApiException &&
+          (error.isUnauthorized || error.isForbidden)) {
         _purge();
         return;
       }
@@ -170,7 +171,8 @@ class _CountryAdministrationPageState extends State<CountryAdministrationPage> {
       );
       if (_authorized(epoch)) await _load();
     } on Object catch (error) {
-      if (error is ApiException && error.isUnauthorized) {
+      if (error is ApiException &&
+          (error.isUnauthorized || error.isForbidden)) {
         _purge();
         return;
       }
@@ -208,7 +210,9 @@ class _CountryAdministrationPageState extends State<CountryAdministrationPage> {
   @override
   Widget build(BuildContext context) => _revoked
       ? const Center(
-          child: Text('Administrator access changed. Sign in again.'),
+          child: Text(
+            'Access to this page changed. Refresh your permissions to continue.',
+          ),
         )
       : Padding(
           padding: const EdgeInsets.all(24),
