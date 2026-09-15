@@ -8,6 +8,8 @@ enum CatalogOperationsFailureKind {
   conflict,
   validation,
   unavailable,
+  invalidResponse,
+  authenticationRequired,
 }
 
 final class CatalogOperationsFailure implements Exception {
@@ -27,8 +29,18 @@ abstract interface class CatalogOperationsPort {
     required int offset,
   });
   Future<CatalogProductDetail> product(String productId);
-  Future<List<PublishedCategory>> searchCategories(String query);
-  Future<List<CatalogConflict>> conflicts(String queue);
+  Future<List<PublishedCategory>> searchCategories(
+    String query, {
+    int limit = 100,
+    int offset = 0,
+    String? afterId,
+  });
+  Future<List<CatalogConflict>> conflicts(
+    String queue, {
+    int limit = 50,
+    int offset = 0,
+    String? afterId,
+  });
   Future<void> keepExisting({
     required CatalogConflict conflict,
     required String reason,
@@ -42,7 +54,11 @@ abstract interface class CatalogOperationsPort {
     required CatalogMergePreview preview,
     required String reason,
   });
-  Future<List<CatalogMergeEvent>> mergeEvents();
+  Future<List<CatalogMergeEvent>> mergeEvents({
+    int limit = 50,
+    int offset = 0,
+    String? afterId,
+  });
   Future<CatalogMergeResult> reverseMerge({
     required CatalogMergeEvent event,
     required String reason,
@@ -94,39 +110,48 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
   });
 
   @override
-  Future<List<PublishedCategory>> searchCategories(String query) =>
-      _run(() async {
-        final cleaned = query.trim();
-        if (cleaned.length > 191) {
-          throw const CatalogOperationsFailure(
-            kind: CatalogOperationsFailureKind.validation,
-            safeMessage: 'The category search was not valid.',
-          );
+  Future<List<PublishedCategory>> searchCategories(
+    String query, {
+    int limit = 100,
+    int offset = 0,
+    String? afterId,
+  }) => _run(() async {
+    final cleaned = query.trim();
+    if (cleaned.length > 191) {
+      throw const CatalogOperationsFailure(
+        kind: CatalogOperationsFailureKind.validation,
+        safeMessage: 'The category search was not valid.',
+      );
+    }
+    final response = await _api.get(
+      '/api/v1/catalog/categories',
+      query: <String, String>{
+        if (cleaned.isNotEmpty) 'q': cleaned,
+        'limit': '$limit',
+        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
+      },
+    );
+    final data = response.jsonObject['data'];
+    if (data is! List<Object?>) {
+      throw const FormatException('Expected category data.');
+    }
+    return List<PublishedCategory>.unmodifiable(
+      data.map((entry) {
+        if (entry is! Map<String, Object?>) {
+          throw const FormatException('Expected category object.');
         }
-        final response = await _api.get(
-          '/api/v1/catalog/categories',
-          query: <String, String>{
-            if (cleaned.isNotEmpty) 'q': cleaned,
-            'limit': '100',
-            'offset': '0',
-          },
-        );
-        final data = response.jsonObject['data'];
-        if (data is! List<Object?>) {
-          throw const FormatException('Expected category data.');
-        }
-        return List<PublishedCategory>.unmodifiable(
-          data.map((entry) {
-            if (entry is! Map<String, Object?>) {
-              throw const FormatException('Expected category object.');
-            }
-            return PublishedCategory.fromJson(entry);
-          }),
-        );
-      });
+        return PublishedCategory.fromJson(entry);
+      }),
+    );
+  });
 
   @override
-  Future<List<CatalogConflict>> conflicts(String queue) => _run(() async {
+  Future<List<CatalogConflict>> conflicts(
+    String queue, {
+    int limit = 50,
+    int offset = 0,
+    String? afterId,
+  }) => _run(() async {
     if (!const <String>{'duplicates', 'aliases', 'barcodes'}.contains(queue)) {
       throw const CatalogOperationsFailure(
         kind: CatalogOperationsFailureKind.validation,
@@ -135,7 +160,11 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
     }
     final response = await _api.get(
       '/api/v1/catalog-admin/workbench',
-      query: <String, String>{'queue': queue, 'limit': '50', 'offset': '0'},
+      query: <String, String>{
+        'queue': queue,
+        'limit': '$limit',
+        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
+      },
     );
     final data = response.jsonObject['data'];
     if (data is! List<Object?>) {
@@ -264,13 +293,17 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
   });
 
   @override
-  Future<List<CatalogMergeEvent>> mergeEvents() => _run(() async {
+  Future<List<CatalogMergeEvent>> mergeEvents({
+    int limit = 50,
+    int offset = 0,
+    String? afterId,
+  }) => _run(() async {
     final response = await _api.get(
       '/api/v1/catalog-admin/workbench',
-      query: const <String, String>{
+      query: <String, String>{
         'queue': 'merges',
-        'limit': '50',
-        'offset': '0',
+        'limit': '$limit',
+        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
       },
     );
     final data = response.jsonObject['data'];
@@ -321,9 +354,14 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
       rethrow;
     } on ApiException catch (error) {
       throw switch (error.statusCode) {
-        401 || 403 => const CatalogOperationsFailure(
+        401 => const CatalogOperationsFailure(
+          kind: CatalogOperationsFailureKind.authenticationRequired,
+          safeMessage: 'The session must be renewed.',
+        ),
+        403 => const CatalogOperationsFailure(
           kind: CatalogOperationsFailureKind.forbidden,
-          safeMessage: 'Catalog operator authorization was lost.',
+          safeMessage:
+              'This catalog action is not permitted. Access has been refreshed.',
         ),
         409 => const CatalogOperationsFailure(
           kind: CatalogOperationsFailureKind.conflict,
@@ -340,8 +378,9 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
       };
     } on FormatException {
       throw const CatalogOperationsFailure(
-        kind: CatalogOperationsFailureKind.unavailable,
-        safeMessage: 'Catalog data could not be read safely.',
+        kind: CatalogOperationsFailureKind.invalidResponse,
+        safeMessage:
+            'The server returned invalid catalog data. Reload or report the request code.',
       );
     }
   }

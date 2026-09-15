@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expectedDigest =
-  '40a8477521baa6c41cf2c5d872068f5ae1bf255a8d0bbccc97a05688d705ad57';
+  'f6591ae866efbcc9e661528c7f595da0d7093d959d64c66c09b0c5be1dcb7c58';
 const contractBytes = await readFile(
   path.join(root, 'contracts', 'providentia-v1.json'),
 );

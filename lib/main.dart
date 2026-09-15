@@ -25,6 +25,8 @@ Future<void> main(List<String> arguments) async {
     ensureAccessToken: ({required force}) =>
         session.ensureFreshAccessToken(force: force),
     onAuthorizationLost: () => session.authorizationLost(),
+    onResourceForbidden: () => session.resourceForbidden(),
+    authorizationEpochProvider: () => session.authorizationEpoch,
   );
   session = SessionController(api: api, credentialStore: credentialStore);
   runApp(ProvidentiaAdminApp(api: api, session: session));

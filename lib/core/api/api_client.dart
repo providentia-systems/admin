@@ -81,10 +81,17 @@ final class ApiException implements Exception {
   final Map<String, Object?>? problem;
 
   bool get isConflict => statusCode == 409;
-  bool get isUnauthorized => statusCode == 401 || statusCode == 403;
+  bool get isUnauthorized => statusCode == 401;
+  bool get isForbidden => statusCode == 403;
 
   @override
   String toString() => 'ApiException($statusCode, $message)';
+}
+
+/// Only an adapter which can prove that no request bytes were handed to the
+/// transport may use this exception. Socket/time-out failures are ambiguous.
+final class ApiRequestNotSentException implements Exception {
+  const ApiRequestNotSentException();
 }
 
 final class ApiResponse {
@@ -119,12 +126,16 @@ final class ApiClient implements AdminApi {
     required AccessTokenProvider accessTokenProvider,
     required EnsureAccessTokenCallback ensureAccessToken,
     required AuthorizationLostCallback onAuthorizationLost,
+    AuthorizationLostCallback? onResourceForbidden,
+    int Function()? authorizationEpochProvider,
   }) => ApiClient._(
     baseUri,
     httpClient,
     accessTokenProvider,
     ensureAccessToken,
     onAuthorizationLost,
+    onResourceForbidden,
+    authorizationEpochProvider,
   );
 
   ApiClient._(
@@ -133,6 +144,8 @@ final class ApiClient implements AdminApi {
     this._accessTokenProvider,
     this._ensureAccessToken,
     this._onAuthorizationLost,
+    this._onResourceForbidden,
+    this._authorizationEpochProvider,
   );
 
   final Uri baseUri;
@@ -140,6 +153,8 @@ final class ApiClient implements AdminApi {
   final AccessTokenProvider _accessTokenProvider;
   final EnsureAccessTokenCallback _ensureAccessToken;
   final AuthorizationLostCallback _onAuthorizationLost;
+  final AuthorizationLostCallback? _onResourceForbidden;
+  final int Function()? _authorizationEpochProvider;
 
   @override
   Future<ApiResponse> get(
@@ -202,13 +217,19 @@ final class ApiClient implements AdminApi {
     Map<String, String>? query,
     Map<String, String>? headers,
   }) async {
+    final epoch = _authorizationEpochProvider?.call();
     if (!await _ensureAccessToken(force: false)) {
-      _onAuthorizationLost();
+      // The session controller owns invalidation. A failed renewal may be a
+      // temporary outage or an uncertain rotation, not revoked credentials.
       throw const ApiException(
-        statusCode: 401,
-        message: 'The administrator session must be renewed.',
+        statusCode: 503,
+        message: 'Session recovery is required before another request.',
+        problem: <String, Object?>{
+          'type': 'urn:providentia:session-recovery-required',
+        },
       );
     }
+    _checkEpoch(epoch);
     var response = await _send(
       method,
       path,
@@ -217,7 +238,18 @@ final class ApiClient implements AdminApi {
       headers: headers,
       authenticated: true,
     );
-    if (response.statusCode == 401 && await _ensureAccessToken(force: true)) {
+    _checkEpoch(epoch, response);
+    if (response.statusCode == 401) {
+      if (!await _ensureAccessToken(force: true)) {
+        throw const ApiException(
+          statusCode: 503,
+          message: 'Session recovery is required before another request.',
+          problem: <String, Object?>{
+            'type': 'urn:providentia:session-recovery-required',
+          },
+        );
+      }
+      _checkEpoch(epoch, response);
       response = await _send(
         method,
         path,
@@ -227,7 +259,22 @@ final class ApiClient implements AdminApi {
         authenticated: true,
       );
     }
+    _checkEpoch(epoch, response);
     return _complete(response, authorizationRequired: true);
+  }
+
+  void _checkEpoch(int? expected, [ApiResponse? response]) {
+    if (expected != _authorizationEpochProvider?.call()) {
+      response?.bytes.fillRange(0, response.bytes.length, 0);
+      throw const ApiException(
+        statusCode: 409,
+        message:
+            'Access changed while the request was in flight. Reload the page.',
+        problem: <String, Object?>{
+          'type': 'urn:providentia:authorization-changed',
+        },
+      );
+    }
   }
 
   Future<ApiResponse> _send(
@@ -239,21 +286,32 @@ final class ApiClient implements AdminApi {
     required bool authenticated,
   }) async {
     final token = authenticated ? _accessTokenProvider() : null;
-    final uri = baseUri
-        .resolve(path)
-        .replace(
-          queryParameters: query == null || query.isEmpty ? null : query,
-        );
-    final request = http.Request(method, uri);
-    request.headers.addAll(<String, String>{
-      'Accept': 'application/json',
-      'X-Request-ID': newUuidV4(),
-      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      ...?headers,
-    });
-    if (body != null) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode(body);
+    late final http.Request request;
+    try {
+      final uri = baseUri
+          .resolve(path)
+          .replace(
+            queryParameters: query == null || query.isEmpty ? null : query,
+          );
+      if (uri.scheme != baseUri.scheme ||
+          uri.host != baseUri.host ||
+          uri.port != baseUri.port ||
+          uri.userInfo.isNotEmpty) {
+        throw const FormatException('The request origin is not the backend.');
+      }
+      request = http.Request(method, uri);
+      request.headers.addAll(<String, String>{
+        'Accept': 'application/json',
+        'X-Request-ID': newUuidV4(),
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        ...?headers,
+      });
+      if (body != null) {
+        request.headers['Content-Type'] = 'application/json';
+        request.body = jsonEncode(body);
+      }
+    } on Object {
+      throw const ApiRequestNotSentException();
     }
 
     final streamed = await _http.send(request);
@@ -290,9 +348,10 @@ final class ApiClient implements AdminApi {
       return response;
     }
 
-    if (authorizationRequired &&
-        (response.statusCode == 401 || response.statusCode == 403)) {
+    if (authorizationRequired && response.statusCode == 401) {
       _onAuthorizationLost();
+    } else if (authorizationRequired && response.statusCode == 403) {
+      _onResourceForbidden?.call();
     }
     Map<String, Object?>? problem;
     try {
@@ -301,17 +360,53 @@ final class ApiClient implements AdminApi {
     } on FormatException {
       // The status and generic message remain authoritative for non-JSON errors.
     }
-    final detail = problem?['detail'];
-    final title = problem?['title'];
+    // Only a contract discriminator and a redacted correlation ID may escape
+    // the transport. Backend detail/title text can contain private payloads.
+    final typeValue = problem?['type'];
+    final type = typeValue is String && _problemType.hasMatch(typeValue)
+        ? typeValue
+        : 'about:blank';
+    final requestValue = problem?['requestId'];
+    final requestId =
+        requestValue is String && _requestIdentity.hasMatch(requestValue)
+        ? requestValue
+        : null;
     throw ApiException(
       statusCode: response.statusCode,
-      message: detail is String
-          ? detail
-          : title is String
-          ? title
-          : 'The server rejected the request.',
-      problem: problem,
+      message: _safeProblemMessage(response.statusCode, type),
+      problem: <String, Object?>{
+        'type': type,
+        'status': response.statusCode,
+        'requestId': ?requestId,
+      },
     );
+  }
+
+  static final RegExp _problemType = RegExp(
+    r'^urn:providentia:[a-z][a-z0-9-]{0,80}$',
+  );
+  static final RegExp _requestIdentity = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
+
+  static String _safeProblemMessage(int status, String type) {
+    if (type == 'urn:providentia:stale-revision') {
+      return 'Reload the current revision before trying again.';
+    }
+    return switch (status) {
+      401 => 'Sign in again to continue.',
+      403 =>
+        'You no longer have permission for this action. Refresh permissions.',
+      404 =>
+        'The requested record is unavailable or you no longer have access.',
+      409 =>
+        'This action conflicts with the current state. Reload and resolve the conflict.',
+      400 || 422 => 'Review the submitted values before trying again.',
+      413 => 'The request is too large. Choose a smaller input.',
+      429 => 'Too many requests. Retry after the waiting period.',
+      >= 500 => 'The service is temporarily unavailable. Retry the connection.',
+      _ => 'The server rejected the request. Reload before trying again.',
+    };
   }
 
   void close() => _http.close();

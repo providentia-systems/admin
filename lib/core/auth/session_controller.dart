@@ -7,7 +7,14 @@ import '../security/secure_id.dart';
 import 'credential_store.dart';
 import 'operator_authorization.dart';
 
-enum SessionPhase { restoring, signedOut, loginPending, authenticated }
+enum SessionPhase {
+  restoring,
+  signedOut,
+  loginPending,
+  authenticated,
+  temporarilyUnavailable,
+  reauthenticationRequired,
+}
 
 final class EmailCodeChallenge {
   const EmailCodeChallenge({
@@ -56,6 +63,9 @@ final class SessionController extends ChangeNotifier {
   int _sessionEpoch = 0;
   int _loginEpoch = 0;
   Future<bool>? _refreshInFlight;
+  bool _refreshOutcomeUncertain = false;
+  bool _permissionRefreshInFlight = false;
+  Map<String, String> _sessionValues = <String, String>{};
   Future<void> _storageTail = Future<void>.value();
 
   Future<T> _mutateStorage<T>(Future<T> Function() action) {
@@ -69,17 +79,28 @@ final class SessionController extends ChangeNotifier {
 
   SessionPhase get phase => _phase;
   OperatorAuthorization get authorization => _authorization;
-  String? get accessToken => _accessToken;
+  String? get accessToken =>
+      _refreshOutcomeUncertain || _phase == SessionPhase.temporarilyUnavailable
+      ? null
+      : _accessToken;
   String? get userId => _userId;
   EmailCodeChallenge? get challenge => _challenge;
   String? get error => _error;
   int get authorizationEpoch => _authorizationEpoch;
 
   Future<void> restore() async {
+    final refreshing = _refreshInFlight;
+    if (refreshing != null) {
+      await refreshing;
+      return;
+    }
     final loginEpoch = ++_loginEpoch;
+    _sessionEpoch += 1;
+    _bootstrapGeneration += 1;
     _phase = SessionPhase.restoring;
     _error = null;
     notifyListeners();
+    var activated = false;
     try {
       final installationId = await _credentialStore.readInstallationId();
       if (loginEpoch != _loginEpoch) return;
@@ -101,10 +122,19 @@ final class SessionController extends ChangeNotifier {
         return;
       }
       _activateSession(stored);
+      activated = true;
+      if (stored['refreshState'] == 'pending') {
+        _suspendSession(uncertain: true);
+        return;
+      }
       await _bootstrapAuthorization();
-    } on Object {
-      if (loginEpoch == _loginEpoch) {
+    } on Object catch (error) {
+      if (loginEpoch != _loginEpoch) return;
+      if ((error is ApiException && error.statusCode == 401) ||
+          (!activated && error is FormatException)) {
         await _purgeSession('Your administrator session must be renewed.');
+      } else {
+        _suspendSession(uncertain: _refreshOutcomeUncertain);
       }
     }
   }
@@ -194,8 +224,9 @@ final class SessionController extends ChangeNotifier {
       await _discardCredentials(credentials);
       return false;
     }
+    var established = false;
     try {
-      final established = await _establishSession(
+      established = await _establishSession(
         credentials,
         expectedLoginEpoch: loginEpoch,
         expectedChallenge: current,
@@ -206,11 +237,16 @@ final class SessionController extends ChangeNotifier {
       }
       await _bootstrapAuthorization(expectedSessionEpoch: _sessionEpoch);
       return _phase == SessionPhase.authenticated;
-    } on Object {
+    } on Object catch (error) {
       if (loginEpoch == _loginEpoch) {
-        await _purgeSession(
-          'The administrator session could not be established. Request a new code.',
-        );
+        if (established &&
+            !(error is ApiException && error.statusCode == 401)) {
+          _suspendSession(uncertain: _refreshOutcomeUncertain);
+        } else {
+          await _purgeSession(
+            'The administrator session could not be established. Request a new code.',
+          );
+        }
       }
       rethrow;
     }
@@ -246,13 +282,20 @@ final class SessionController extends ChangeNotifier {
 
   void authorizationLost() {
     // This synchronous state transition prevents stale privileged widgets from
-    // emitting after a 401/403 while secure-storage cleanup completes.
+    // emitting after confirmed session loss while secure-storage cleanup completes.
     _clearMemory('Administrator authorization was lost. Sign in again.');
     notifyListeners();
     unawaited(_clearStoredCredentialMaterial());
   }
 
   Future<bool> ensureFreshAccessToken({bool force = false}) {
+    if (_refreshOutcomeUncertain ||
+        _phase == SessionPhase.temporarilyUnavailable ||
+        _phase == SessionPhase.reauthenticationRequired) {
+      return Future<bool>.value(false);
+    }
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
     final accessToken = _accessToken;
     final refreshToken = _refreshToken;
     final accessExpiresAt = _accessExpiresAt;
@@ -277,8 +320,6 @@ final class SessionController extends ChangeNotifier {
       return Future<bool>.value(true);
     }
 
-    final inFlight = _refreshInFlight;
-    if (inFlight != null) return inFlight;
     final epoch = _sessionEpoch;
     late final Future<bool> refresh;
     refresh = _rotateSession(epoch).whenComplete(() {
@@ -288,7 +329,50 @@ final class SessionController extends ChangeNotifier {
     return refresh;
   }
 
-  Future<void> refreshAuthorization() => _bootstrapAuthorization();
+  Future<void> refreshAuthorization() async {
+    try {
+      await _bootstrapAuthorization();
+    } on Object catch (error) {
+      if (error is ApiException && error.statusCode == 401) {
+        authorizationLost();
+      } else if (_accessToken != null) {
+        _suspendSession(uncertain: _refreshOutcomeUncertain);
+      }
+    }
+  }
+
+  /// Invalidate privileged views immediately, without invalidating a valid
+  /// identity. The authoritative capabilities are then loaded again.
+  void resourceForbidden() {
+    if (_permissionRefreshInFlight || _accessToken == null) return;
+    _authorizationEpoch += 1;
+    _bootstrapGeneration += 1;
+    _authorization = OperatorAuthorization.none;
+    _profile = const <String, Object?>{};
+    _phase = SessionPhase.restoring;
+    notifyListeners();
+    _permissionRefreshInFlight = true;
+    unawaited(
+      refreshAuthorization().whenComplete(() {
+        _permissionRefreshInFlight = false;
+      }),
+    );
+  }
+
+  void _suspendSession({required bool uncertain}) {
+    _refreshOutcomeUncertain = uncertain;
+    _authorizationEpoch += 1;
+    _bootstrapGeneration += 1;
+    _authorization = OperatorAuthorization.none;
+    _profile = const <String, Object?>{};
+    _phase = uncertain
+        ? SessionPhase.reauthenticationRequired
+        : SessionPhase.temporarilyUnavailable;
+    _error = uncertain
+        ? 'Session renewal may have completed. Sign in again; the previous refresh credential will not be retried.'
+        : 'The service or keyring is temporarily unavailable. Retry to restore your session.';
+    notifyListeners();
+  }
 
   Future<bool> _rotateSession(int epoch) async {
     final refreshToken = _refreshToken;
@@ -301,7 +385,25 @@ final class SessionController extends ChangeNotifier {
         expectedUserId == null) {
       return false;
     }
+    var journaled = false;
+    var sent = false;
     try {
+      // Write ahead before handing the one-use refresh proof to the network.
+      // A restart at any point must not replay a possibly rotated credential.
+      journaled = await _mutateStorage(() async {
+        if (epoch != _sessionEpoch) return false;
+        await _credentialStore.writeSession(<String, String>{
+          ..._sessionValues,
+          'refreshState': 'pending',
+        });
+        if (epoch != _sessionEpoch) {
+          await _credentialStore.clearSession();
+          return false;
+        }
+        return true;
+      });
+      if (!journaled) return false;
+      sent = true;
       final response = await _api.postPublic(
         '/api/v1/auth/refresh',
         body: <String, Object?>{'refreshToken': refreshToken},
@@ -326,10 +428,32 @@ final class SessionController extends ChangeNotifier {
       if (!stored) return false;
       _activateSession(values);
       return true;
-    } on Object {
-      if (epoch == _sessionEpoch) {
+    } on Object catch (error) {
+      if (epoch != _sessionEpoch) return false;
+      if (error is ApiException && error.statusCode == 401) {
         await _purgeSession('Your administrator session must be renewed.');
+        return false;
       }
+      final notApplied =
+          !sent ||
+          error is ApiRequestNotSentException ||
+          (error is ApiException &&
+              error.statusCode == 429 &&
+              error.problem?['type'] ==
+                  'urn:providentia:authentication-rate-limited');
+      if (notApplied && journaled) {
+        try {
+          await _mutateStorage(() async {
+            if (epoch == _sessionEpoch) {
+              await _credentialStore.writeSession(_sessionValues);
+            }
+          });
+        } on Object {
+          if (epoch == _sessionEpoch) _suspendSession(uncertain: true);
+          return false;
+        }
+      }
+      if (epoch == _sessionEpoch) _suspendSession(uncertain: !notApplied);
       return false;
     }
   }
@@ -406,6 +530,9 @@ final class SessionController extends ChangeNotifier {
     _refreshExpiresAt = null;
     _idleExpiresAt = null;
     _refreshInFlight = null;
+    _refreshOutcomeUncertain = false;
+    _permissionRefreshInFlight = false;
+    _sessionValues = <String, String>{};
     _authorization = OperatorAuthorization.none;
     _challenge = null;
     _phase = SessionPhase.signedOut;
@@ -515,6 +642,8 @@ final class SessionController extends ChangeNotifier {
 
   void _activateSession(Map<String, String> values) {
     _validateSession(values);
+    _sessionValues = Map<String, String>.of(values)..remove('refreshState');
+    _refreshOutcomeUncertain = values['refreshState'] == 'pending';
     _accessToken = values['accessToken'];
     _refreshToken = values['refreshToken'];
     _sessionId = values['sessionId'];
@@ -537,7 +666,9 @@ final class SessionController extends ChangeNotifier {
     String? expectedDeviceId,
     String? expectedUserId,
   }) {
-    if (!_hasAtomicSession(values)) {
+    if (!_hasAtomicSession(values) ||
+        (values['refreshState'] != null &&
+            values['refreshState'] != 'pending')) {
       throw const FormatException('Native session credentials are incomplete.');
     }
     if (values['installationId'] != _installationId ||

@@ -26,7 +26,11 @@ final class CatalogQueueItem {
       'kind',
       'type',
       'contributionType',
+      'proposalType',
     ], 'proposal');
+    if (json.containsKey('contributionType')) {
+      json = _contributionProjection(json, kind);
+    }
     final revision = json['revision'] ?? json['contributionRevision'] ?? 1;
     if (revision is! int || revision < 1) {
       throw const FormatException('Catalog moderation revision was malformed.');
@@ -57,7 +61,11 @@ final class CatalogQueueItem {
     return CatalogQueueItem(
       id: firstString(const ['id', 'proposalId', 'contributionId'], 'unknown'),
       revision: revision,
-      status: firstString(const ['status', 'decision'], 'pending'),
+      status: firstString(const [
+        'status',
+        'moderationStatus',
+        'decision',
+      ], 'pending'),
       kind: kind,
       title:
           storePrice?.title ??
@@ -72,6 +80,85 @@ final class CatalogQueueItem {
     );
   }
 
+  /// Only the backend's attribution-free moderation projection may reach a
+  /// catalog screen. Unknown and nested household fields fail closed.
+  static Map<String, Object?> _contributionProjection(
+    Map<String, Object?> json,
+    String kind,
+  ) {
+    const top = <String>{
+      'id',
+      'contributionType',
+      'payload',
+      'status',
+      'revision',
+      'consentNoticeVersion',
+      'consentRevision',
+      'createdAt',
+      'proposalLink',
+      'imagePublication',
+    };
+    const identity = <String>{
+      'canonicalName',
+      'brand',
+      'categoryLabel',
+      'barcode',
+      'packText',
+    };
+    const image = <String>{
+      'assetDigest',
+      'mediaType',
+      'altText',
+      'provenance',
+      'rightsDeclarationVersion',
+      'reuseNoticeVersion',
+    };
+    final payload = json['payload'];
+    final fields = switch (kind) {
+      'product_identity' => identity,
+      'product_image' => image,
+      'store_price' => StorePriceModeration.allowedWireFields,
+      _ => throw const FormatException('Unknown contribution type.'),
+    };
+    if (!top.containsAll(json.keys) ||
+        payload is! Map<String, Object?> ||
+        !fields.containsAll(payload.keys) ||
+        payload.values.any((value) => value != null && value is! String)) {
+      throw const FormatException('Unsafe catalog contribution projection.');
+    }
+    void checkLink(String key, Set<String> keys) {
+      final link = json[key];
+      if (link != null &&
+          (link is! Map<String, Object?> ||
+              !keys.containsAll(link.keys) ||
+              link.values.any(
+                (value) => value != null && value is! String && value is! int,
+              ))) {
+        throw const FormatException('Unsafe catalog publication projection.');
+      }
+    }
+
+    checkLink('proposalLink', const <String>{
+      'contributionId',
+      'contributionRevision',
+      'proposalId',
+      'proposalStatus',
+      'publishedCategoryId',
+      'publishedCategoryName',
+      'linkedAt',
+    });
+    checkLink('imagePublication', const <String>{
+      'contributionId',
+      'contributionRevision',
+      'productId',
+      'productName',
+      'iconId',
+      'iconRevision',
+      'publishedAt',
+    });
+    return Map<String, Object?>.unmodifiable(json);
+  }
+
   final String id;
   final int revision;
   final String status;
@@ -79,6 +166,15 @@ final class CatalogQueueItem {
   final String title;
   final Map<String, Object?> raw;
   final StorePriceModeration? storePrice;
+
+  Map<String, Object?>? get proposalLink =>
+      raw['proposalLink'] is Map<String, Object?>
+      ? raw['proposalLink']! as Map<String, Object?>
+      : null;
+  String? get linkedProposalId => proposalLink?['proposalId'] as String?;
+  String? get linkedProposalStatus =>
+      proposalLink?['proposalStatus'] as String?;
+  bool get imagePublished => raw['imagePublication'] is Map<String, Object?>;
 
   bool get isProductIdentityContribution => kind == 'product_identity';
   bool get isProductImageContribution => kind == 'product_image';
