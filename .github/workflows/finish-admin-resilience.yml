@@ -20,6 +20,7 @@ jobs:
           printf '%s  %s\n' 4c20b3d253286d7d3022b19a473436da5919da0b2a7aec21fcb26f0dc327fd7d "$RUNNER_TEMP/admin.patch" | sha256sum -c -
           git apply --check "$RUNNER_TEMP/admin.patch"
           git apply "$RUNNER_TEMP/admin.patch"
+          sed -i "s/if (requestId != null) 'requestId': requestId,/'requestId': ?requestId,/" lib/core/api/api_client.dart
           rm .github/repair/admin.patch.gz.*
           rm .github/workflows/finish-admin-resilience.yml
       - name: Install pinned Node runtime
