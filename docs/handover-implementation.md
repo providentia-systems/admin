@@ -1,3 +1,7 @@
+# Historical Admin PR #12 implementation record
+
+The following scope, digest and checks describe the earlier catalog-administration work. Current household metadata compatibility is documented in [Household workflows](household-workflows.md); this historical outstanding-work list is not the status of Client #21 or backend #25.
+
 # Handover implementation record — 22 September 2026
 
 ## Delivered scope

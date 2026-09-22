@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expectedDigest =
-  '13ccdc2d37e73955394a7b7c52da6d9ff7aeefdfd763ac809876737867d15c44';
+  'ef5714a6298326d6fb449b966117e8b61c74de67d1bfc274ad8ec431aecd802d';
 const contractBytes = await readFile(
   path.join(root, 'contracts', 'providentia-v1.json'),
 );
@@ -40,9 +40,9 @@ const generated = await readFile(
 );
 
 const digest = createHash('sha256').update(contractBytes).digest('hex');
-assert(digest === expectedDigest, 'OpenAPI digest drifted from backend 2.1.0.');
+assert(digest === expectedDigest, 'OpenAPI digest drifted from backend 2.2.0.');
 assert(contract.openapi === '3.1.0', 'OpenAPI version must be 3.1.0.');
-assert(contract.info?.version === '2.1.0', 'API version must be 2.1.0.');
+assert(contract.info?.version === '2.2.0', 'API version must be 2.2.0.');
 assert(Object.keys(contract.paths ?? {}).length === 194, 'Expected 194 API paths.');
 
 let operationCount = 0;
@@ -68,10 +68,10 @@ assert(
   'Generated Dart client is not bound to this contract.',
 );
 assert(!generated.includes('/api/v1/homes'), 'Generated Admin client exposes homes.');
-assert(lock.apiVersion === '2.1.0', 'Contract lock API version drifted.');
-assert(lock.version === '2.1.0', 'Contract lock publication version drifted.');
+assert(lock.apiVersion === '2.2.0', 'Contract lock API version drifted.');
+assert(lock.version === '2.2.0', 'Contract lock publication version drifted.');
 assert(lock.sha256 === expectedDigest, 'Contract lock publication digest drifted.');
-assert(manifest.contractVersion === '2.1.0', 'Generated manifest API version drifted.');
+assert(manifest.contractVersion === '2.2.0', 'Generated manifest API version drifted.');
 assert(Object.keys(contract.components?.schemas ?? {}).length === 285, 'Expected 285 schemas.');
 const allowedOperations = new Set(manifest.allowedOperationIds);
 assert(allowedOperations.size === 92, 'Admin allowlist contains duplicate or missing operations.');
@@ -215,7 +215,7 @@ assert(
   'Generated Admin client must not expose removeHomeMembership.',
 );
 
-process.stdout.write(`Admin contract verified: 2.1.0 / ${digest}.\n`);
+process.stdout.write(`Admin contract verified: 2.2.0 / ${digest}.\n`);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
