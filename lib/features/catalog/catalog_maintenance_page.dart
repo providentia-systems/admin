@@ -4,6 +4,7 @@ import '../../core/api/api_client.dart';
 import '../../core/auth/session_controller.dart';
 import '../../core/security/secure_id.dart';
 import 'catalog_maintenance_repository.dart';
+import 'catalog_reason_field.dart';
 
 class CatalogMaintenancePage extends StatefulWidget {
   const CatalogMaintenancePage({
@@ -24,6 +25,9 @@ class CatalogMaintenancePage extends StatefulWidget {
 class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
   late final _repository = CatalogMaintenanceRepository(widget.api);
   late String _type = widget.productId == null ? 'category' : 'product';
+  final _query = TextEditingController();
+  final _scroll = ScrollController();
+  final _contexts = <String, ({String query, int offset, double scroll})>{};
   int _offset = 0;
   int _request = 0;
   List<CatalogEntity> _rows = const [];
@@ -39,6 +43,8 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
   @override
   void dispose() {
     widget.session.removeListener(_authorizationChanged);
+    _query.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -69,6 +75,7 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
         _type,
         offset: _offset,
         productId: widget.productId,
+        query: _query.text,
       );
       if (!_authorized(epoch) || request != _request) return;
       setState(() {
@@ -85,9 +92,11 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
   }
 
   Future<void> _edit([CatalogEntity? entity]) async {
+    if (!widget.canCurate || _busy) return;
     final epoch = widget.session.authorizationEpoch;
     await showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => _CatalogEntityEditor(
         repository: _repository,
         session: widget.session,
@@ -97,6 +106,41 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
       ),
     );
     if (_authorized(epoch)) await _load();
+  }
+
+  void _selectType(String type) {
+    if (_busy || type == _type) return;
+    _contexts[_type] = (
+      query: _query.text,
+      offset: _offset,
+      scroll: _scroll.hasClients ? _scroll.offset : 0,
+    );
+    final previous = _contexts[type];
+    setState(() {
+      _type = type;
+      _query.text = previous?.query ?? '';
+      _offset = previous?.offset ?? 0;
+    });
+    unawaited(
+      _load().then((_) {
+        if (mounted && _scroll.hasClients) {
+          _scroll.jumpTo(
+            (previous?.scroll ?? 0).clamp(0, _scroll.position.maxScrollExtent),
+          );
+        }
+      }),
+    );
+  }
+
+  void _search() {
+    if (_busy) return;
+    if (_query.text.runes.length > 191) {
+      setState(() => _error = 'Search text must not exceed 191 characters.');
+      return;
+    }
+    setState(() => _offset = 0);
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    unawaited(_load());
   }
 
   @override
@@ -113,51 +157,102 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
           const Text(
             'Create, edit, archive and restore catalog identities. Changes require an audit reason. Referenced packs and units retain their historical measurement meaning.',
           ),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButton<String>(
-                  value: _type,
-                  isExpanded: true,
-                  items: [
-                    for (final type in catalogEntityFields.keys)
-                      if (widget.productId == null || type != 'identity-rule')
-                        DropdownMenuItem(value: type, child: Text(type)),
-                  ],
-                  onChanged: _busy
-                      ? null
-                      : (value) {
-                          if (value == null) return;
-                          setState(() {
-                            _type = value;
-                            _offset = 0;
-                          });
-                          unawaited(_load());
-                        },
-                ),
+          const SizedBox(height: 24),
+          if (widget.productId == null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 16,
+                runSpacing: 12,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Products'),
+                    selected: _type == 'product',
+                    onSelected: _busy ? null : (_) => _selectType('product'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Categories'),
+                    selected: _type == 'category',
+                    onSelected: _busy ? null : (_) => _selectType('category'),
+                  ),
+                ],
               ),
-              if (widget.canCurate &&
-                  (widget.productId == null ||
-                      !const {'product', 'category', 'unit'}.contains(_type)))
-                FilledButton.icon(
-                  onPressed: _busy ? null : () => _edit(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Create'),
+            ),
+            const SizedBox(height: 16),
+          ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 240,
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey(_type),
+                    initialValue: _type,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Catalog entity',
+                    ),
+                    items: [
+                      for (final type in catalogEntityFields.keys)
+                        if (widget.productId == null || type != 'identity-rule')
+                          DropdownMenuItem(value: type, child: Text(type)),
+                    ],
+                    onChanged: _busy
+                        ? null
+                        : (value) {
+                            if (value != null) _selectType(value);
+                          },
+                  ),
                 ),
-              IconButton(
-                onPressed: _busy ? null : _load,
-                icon: const Icon(Icons.refresh),
-                tooltip: 'Refresh',
-              ),
-            ],
+                if (widget.canCurate &&
+                    (widget.productId == null ||
+                        !const {'product', 'category', 'unit'}.contains(_type)))
+                  FilledButton.icon(
+                    onPressed: _busy ? null : () => _edit(),
+                    icon: const Icon(Icons.add),
+                    label: Text('Add $_type'),
+                  ),
+                IconButton(
+                  onPressed: _busy ? null : _load,
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh',
+                ),
+              ],
+            ),
           ),
+          const SizedBox(height: 16),
+          TextField(
+            key: const Key('catalog-entity-search'),
+            controller: _query,
+            enabled: !_busy,
+            textInputAction: TextInputAction.search,
+            maxLength: 191,
+            decoration: InputDecoration(
+              labelText: 'Search $_type records',
+              helperText:
+                  'Searches all matching records, including archived identities.',
+              suffixIcon: IconButton(
+                onPressed: _busy ? null : _search,
+                tooltip: 'Search catalog records',
+                icon: const Icon(Icons.search),
+              ),
+            ),
+            onSubmitted: (_) => _search(),
+          ),
+          const SizedBox(height: 16),
           if (_busy) const LinearProgressIndicator(),
           if (_error != null) Text(_error!),
           Expanded(
             child: ListView(
+              controller: _scroll,
               children: [
                 for (final row in _rows)
                   ListTile(
+                    key: ValueKey(row.id),
                     title: Text(row.label),
                     subtitle: Text('${row.status} · revision ${row.revision}'),
                     onTap: widget.canCurate ? () => _edit(row) : null,
@@ -233,14 +328,60 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
   };
   final _reason = TextEditingController();
   final Map<String, List<CatalogEntity>> _references = {};
+  late final Map<String, String> _initialFields;
+  bool _allowExit = false;
+  bool _confirmingExit = false;
+  bool get _dirty => _fields.entries.any(
+    (entry) => entry.value.text != _initialFields[entry.key],
+  );
+
   bool _busy = false;
   bool _conflict = false;
   String? _error;
   @override
   void initState() {
     super.initState();
+    _initialFields = {
+      for (final entry in _fields.entries) entry.key: entry.value.text,
+    };
+    for (final field in _fields.values) {
+      field.addListener(_fieldChanged);
+    }
     widget.session.addListener(_revoke);
     unawaited(_loadReferences());
+  }
+
+  void _fieldChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _close() async {
+    if (_busy || _confirmingExit) return;
+    if (_dirty) {
+      _confirmingExit = true;
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Discard unsaved changes?'),
+          content: const Text('Your catalog changes have not been saved.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep editing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Discard changes'),
+            ),
+          ],
+        ),
+      );
+      _confirmingExit = false;
+      if (discard != true || !mounted) return;
+    }
+    if (!mounted) return;
+    setState(() => _allowExit = true);
+    Navigator.pop(context);
   }
 
   void _revoke() {
@@ -307,8 +448,10 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
   }
 
   Future<void> _save(String status) async {
-    if (_reason.text.trim().isEmpty) {
-      setState(() => _error = 'Enter an audit reason.');
+    if (_reason.text.trim().isEmpty || _reason.text.runes.length > 500) {
+      setState(
+        () => _error = 'Enter an audit reason of no more than 500 characters.',
+      );
       return;
     }
     final epoch = widget.session.authorizationEpoch;
@@ -335,6 +478,7 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
       if (mounted &&
           widget.session.phase == SessionPhase.authenticated &&
           widget.session.authorizationEpoch == epoch) {
+        setState(() => _allowExit = true);
         Navigator.pop(context);
       }
     } on ApiException catch (error) {
@@ -357,79 +501,108 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text('${widget.entity == null ? 'Create' : 'Edit'} ${widget.type}'),
-    content: SizedBox(
-      width: 520,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final entry in _fields.entries)
-              if (entry.key.endsWith('Id'))
-                DropdownButtonFormField<String>(
-                  key: ValueKey(
-                    '${entry.key}-${_references[entry.key]?.length}',
+  Widget build(BuildContext context) => PopScope(
+    canPop: _allowExit || (!_busy && !_dirty),
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) unawaited(_close());
+    },
+    child: AlertDialog(
+      title: Text(
+        '${widget.entity == null ? 'Create' : 'Edit'} ${widget.type}',
+      ),
+      content: SizedBox(
+        width: 560,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight:
+                (MediaQuery.sizeOf(context).height -
+                    MediaQuery.viewInsetsOf(context).bottom) *
+                .65,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final entry in _fields.entries)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: entry.key.endsWith('Id')
+                        ? DropdownButtonFormField<String>(
+                            key: ValueKey(
+                              '${entry.key}-${_references[entry.key]?.length}',
+                            ),
+                            initialValue:
+                                _references[entry.key]?.any(
+                                      (row) => row.id == entry.value.text,
+                                    ) ==
+                                    true
+                                ? entry.value.text
+                                : '',
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              labelText: _label(entry.key),
+                            ),
+                            items: [
+                              const DropdownMenuItem(
+                                value: '',
+                                child: Text('Select'),
+                              ),
+                              for (final row
+                                  in _references[entry.key] ??
+                                      <CatalogEntity>[])
+                                DropdownMenuItem(
+                                  value: row.id,
+                                  child: Text(
+                                    row.label,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: _busy
+                                ? null
+                                : (value) => entry.value.text = value ?? '',
+                          )
+                        : TextField(
+                            controller: entry.value,
+                            enabled: !_busy,
+                            maxLines:
+                                entry.key == 'ruleDefinition' ||
+                                    entry.key == 'attributesJson'
+                                ? 4
+                                : 1,
+                            decoration: InputDecoration(
+                              labelText: _label(entry.key),
+                            ),
+                          ),
                   ),
-                  initialValue:
-                      _references[entry.key]?.any(
-                            (row) => row.id == entry.value.text,
-                          ) ==
-                          true
-                      ? entry.value.text
-                      : '',
-                  isExpanded: true,
-                  decoration: InputDecoration(labelText: _label(entry.key)),
-                  items: [
-                    const DropdownMenuItem(value: '', child: Text('Select')),
-                    for (final row
-                        in _references[entry.key] ?? <CatalogEntity>[])
-                      DropdownMenuItem(
-                        value: row.id,
-                        child: Text(row.label, overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
-                  onChanged: _busy
-                      ? null
-                      : (value) => entry.value.text = value ?? '',
-                )
-              else
-                TextField(
-                  controller: entry.value,
+                const SizedBox(height: 8),
+                CatalogReasonField(
+                  controller: _reason,
+                  creating: widget.entity == null,
                   enabled: !_busy,
-                  maxLines:
-                      entry.key == 'ruleDefinition' ||
-                          entry.key == 'attributesJson'
-                      ? 4
-                      : 1,
-                  decoration: InputDecoration(labelText: _label(entry.key)),
                 ),
-            TextField(
-              controller: _reason,
-              enabled: !_busy,
-              maxLength: 500,
-              decoration: const InputDecoration(labelText: 'Audit reason'),
+                if (_error != null) Text(_error!),
+              ],
             ),
-            if (_error != null) Text(_error!),
-          ],
+          ),
         ),
       ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: _busy ? null : () => Navigator.pop(context),
-        child: const Text('Close'),
-      ),
-      if (widget.entity != null && widget.entity!.status != 'archived')
+      actions: [
         TextButton(
-          onPressed: _busy || _conflict ? null : () => _save('archived'),
-          child: const Text('Archive'),
+          onPressed: _busy ? null : _close,
+          child: const Text('Close'),
         ),
-      FilledButton(
-        onPressed: _busy || _conflict ? null : () => _save('published'),
-        child: Text(widget.entity?.status == 'archived' ? 'Restore' : 'Save'),
-      ),
-    ],
+        if (widget.entity != null && widget.entity!.status != 'archived')
+          TextButton(
+            onPressed: _busy || _conflict ? null : () => _save('archived'),
+            child: const Text('Archive'),
+          ),
+        FilledButton(
+          onPressed: _busy || _conflict ? null : () => _save('published'),
+          child: Text(widget.entity?.status == 'archived' ? 'Restore' : 'Save'),
+        ),
+      ],
+    ),
   );
   String _label(String field) => field.replaceAllMapped(
     RegExp('[A-Z]'),
