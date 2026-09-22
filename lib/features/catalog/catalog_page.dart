@@ -393,8 +393,9 @@ class _CatalogPageState extends State<CatalogPage> {
         !widget.canReview ||
         !item.canDecide ||
         (_lane == _CatalogLane.proposals && !item.isProposal) ||
-        (_lane == _CatalogLane.contributions && !item.isContribution))
+        (_lane == _CatalogLane.contributions && !item.isContribution)) {
       return;
+    }
     final epoch = widget.session.authorizationEpoch;
     final lane = _lane;
     if (approve && lane == _CatalogLane.proposals && !widget.canCurate) return;
@@ -424,7 +425,7 @@ class _CatalogPageState extends State<CatalogPage> {
           expectedRevision: item.revision,
         );
       }
-      if (!_isAuthorized(epoch)) return;
+      if (!mounted || !_isAuthorized(epoch)) return;
       if (lane == _CatalogLane.contributions) {
         _contributionStatus = approve ? 'approved' : 'rejected';
         await _load(focusId: item.id);
@@ -437,7 +438,7 @@ class _CatalogPageState extends State<CatalogPage> {
         await _load();
       }
     } on Object catch (error) {
-      if (!_isAuthorized(epoch)) return;
+      if (!mounted || !_isAuthorized(epoch)) return;
       _snack(
         error is ApiException
             ? _safeApiMessage(error)
@@ -460,8 +461,9 @@ class _CatalogPageState extends State<CatalogPage> {
         _mutating ||
         (item.recordType == CatalogQueueRecordType.merge
             ? !widget.canCurate
-            : !widget.canReview))
+            : !widget.canReview)) {
       return;
+    }
     _clearPreview();
     setState(() {
       _operationsSection = item.recordType == CatalogQueueRecordType.merge
@@ -479,15 +481,16 @@ class _CatalogPageState extends State<CatalogPage> {
         !item.isMissingIcon ||
         !widget.canCurate ||
         _loading ||
-        _mutating)
+        _mutating) {
       return;
+    }
     final epoch = widget.session.authorizationEpoch;
     setState(() => _mutating = true);
     final operations = CatalogOperationsRepository(widget.api);
     try {
       // Product revision and icon revision are different concurrency tokens.
       final product = await operations.product(item.id);
-      if (!_isAuthorized(epoch)) return;
+      if (!mounted || !_isAuthorized(epoch)) return;
       final command = await showCatalogIconEditor(
         context: context,
         product: product,
@@ -496,7 +499,7 @@ class _CatalogPageState extends State<CatalogPage> {
       await operations.putIcon(command);
       if (_isAuthorized(epoch)) await _load();
     } on Object catch (error) {
-      if (!_isAuthorized(epoch)) return;
+      if (!mounted || !_isAuthorized(epoch)) return;
       _snack(
         error is CatalogOperationsFailure
             ? error.safeMessage
@@ -562,7 +565,7 @@ class _CatalogPageState extends State<CatalogPage> {
       );
       if (_isAuthorized(epoch)) await _load(focusId: item.id);
     } on Object catch (error) {
-      if (!_isAuthorized(epoch)) return;
+      if (!mounted || !_isAuthorized(epoch)) return;
       _snack(
         error is ApiException
             ? _safeApiMessage(error)
@@ -623,7 +626,7 @@ class _CatalogPageState extends State<CatalogPage> {
       );
       if (_isAuthorized(epoch)) await _load(focusId: item.id);
     } on Object catch (error) {
-      if (!_isAuthorized(epoch)) return;
+      if (!mounted || !_isAuthorized(epoch)) return;
       _snack(
         error is ApiException
             ? _safeApiMessage(error)
