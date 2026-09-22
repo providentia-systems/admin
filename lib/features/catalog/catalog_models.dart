@@ -2,6 +2,15 @@ import 'dart:typed_data';
 
 import '../../core/security/secure_id.dart';
 
+/// Workbench resources are not interchangeable proposal identities.
+enum CatalogQueueRecordType {
+  proposal,
+  contribution,
+  missingIcon,
+  conflict,
+  merge,
+}
+
 final class CatalogQueueItem {
   const CatalogQueueItem({
     required this.id,
@@ -11,9 +20,13 @@ final class CatalogQueueItem {
     required this.title,
     required this.raw,
     this.storePrice,
+    this.recordType = CatalogQueueRecordType.proposal,
   });
 
-  factory CatalogQueueItem.fromJson(Map<String, Object?> json) {
+  factory CatalogQueueItem.fromJson(
+    Map<String, Object?> json, {
+    String? queue,
+  }) {
     String firstString(Iterable<String> keys, String fallback) {
       for (final key in keys) {
         final value = json[key];
@@ -22,18 +35,66 @@ final class CatalogQueueItem {
       return fallback;
     }
 
-    final kind = firstString(const [
-      'kind',
-      'type',
-      'contributionType',
-      'proposalType',
-    ], 'proposal');
-    if (json.containsKey('contributionType')) {
+    final recordType = switch (queue) {
+      'icons' => CatalogQueueRecordType.missingIcon,
+      'duplicates' ||
+      'aliases' ||
+      'barcodes' => CatalogQueueRecordType.conflict,
+      'merges' => CatalogQueueRecordType.merge,
+      'proposals' => CatalogQueueRecordType.proposal,
+      'contributions' => CatalogQueueRecordType.contribution,
+      null when json.containsKey('targetId') =>
+        CatalogQueueRecordType.missingIcon,
+      null when json.containsKey('conflictType') =>
+        CatalogQueueRecordType.conflict,
+      null when json.containsKey('survivorId') => CatalogQueueRecordType.merge,
+      null
+          when json.containsKey('contributionType') ||
+              const [
+                'product_identity',
+                'product_image',
+                'store_price',
+              ].contains(json['type']) =>
+        CatalogQueueRecordType.contribution,
+      null => CatalogQueueRecordType.proposal,
+      _ => throw const FormatException('Unknown catalog workbench queue.'),
+    };
+    final kind = switch (recordType) {
+      CatalogQueueRecordType.missingIcon => 'product needing icon',
+      CatalogQueueRecordType.conflict => firstString(['conflictType'], ''),
+      CatalogQueueRecordType.merge => 'merge',
+      _ => firstString([
+        'kind',
+        'type',
+        'contributionType',
+        'proposalType',
+      ], ''),
+    };
+    if (recordType == CatalogQueueRecordType.contribution) {
+      // Normalize the old alias before applying the strict privacy gate.
+      if (!json.containsKey('contributionType') && json.containsKey('type')) {
+        json = {...json, 'contributionType': json['type']}..remove('type');
+      }
       json = _contributionProjection(json, kind);
     }
-    final revision = json['revision'] ?? json['contributionRevision'] ?? 1;
-    if (revision is! int || revision < 1) {
-      throw const FormatException('Catalog moderation revision was malformed.');
+    final revision = json['revision'] ?? json['contributionRevision'];
+    final id = recordType == CatalogQueueRecordType.missingIcon
+        ? json['targetId']
+        : json['id'] ?? json['proposalId'] ?? json['contributionId'];
+    final status = recordType == CatalogQueueRecordType.missingIcon
+        ? 'Missing icon'
+        : firstString(['status', 'moderationStatus', 'decision'], '');
+    if (revision is! int ||
+        revision < 1 ||
+        id is! String ||
+        !isUuid(id) ||
+        status.isEmpty ||
+        kind.isEmpty ||
+        (recordType == CatalogQueueRecordType.missingIcon &&
+            (json['targetType'] != 'product' ||
+                json['canonicalName'] is! String ||
+                (json['canonicalName']! as String).trim().isEmpty))) {
+      throw const FormatException('Catalog workbench record was malformed.');
     }
     final payload = json['payload'];
     final storePrice = switch (kind) {
@@ -59,13 +120,10 @@ final class CatalogQueueItem {
     }
 
     return CatalogQueueItem(
-      id: firstString(const ['id', 'proposalId', 'contributionId'], 'unknown'),
+      id: id,
       revision: revision,
-      status: firstString(const [
-        'status',
-        'moderationStatus',
-        'decision',
-      ], 'pending'),
+      status: status,
+      recordType: recordType,
       kind: kind,
       title:
           storePrice?.title ??
@@ -159,6 +217,7 @@ final class CatalogQueueItem {
     return Map<String, Object?>.unmodifiable(json);
   }
 
+  final CatalogQueueRecordType recordType;
   final String id;
   final int revision;
   final String status;
@@ -175,6 +234,11 @@ final class CatalogQueueItem {
   String? get linkedProposalStatus =>
       proposalLink?['proposalStatus'] as String?;
   bool get imagePublished => raw['imagePublication'] is Map<String, Object?>;
+
+  bool get isMissingIcon => recordType == CatalogQueueRecordType.missingIcon;
+  bool get isProposal => recordType == CatalogQueueRecordType.proposal;
+  bool get isContribution => recordType == CatalogQueueRecordType.contribution;
+  bool get canDecide => (isProposal || isContribution) && status == 'pending';
 
   bool get isProductIdentityContribution => kind == 'product_identity';
   bool get isProductImageContribution => kind == 'product_image';

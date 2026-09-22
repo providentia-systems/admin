@@ -12,7 +12,7 @@ import 'catalog_product_inspection.dart';
 import 'published_category_picker.dart';
 import 'published_product_picker.dart';
 
-enum _OperationsSection { identities, conflicts, merges }
+enum CatalogOperationsSection { identities, conflicts, merges }
 
 final class CatalogOperationsPage extends StatefulWidget {
   const CatalogOperationsPage({
@@ -21,6 +21,7 @@ final class CatalogOperationsPage extends StatefulWidget {
     required this.canReview,
     required this.canCurate,
     this.operationsPort,
+    this.initialSection,
     super.key,
   });
 
@@ -29,6 +30,7 @@ final class CatalogOperationsPage extends StatefulWidget {
   final bool canReview;
   final bool canCurate;
   final CatalogOperationsPort? operationsPort;
+  final CatalogOperationsSection? initialSection;
 
   @override
   State<CatalogOperationsPage> createState() => _CatalogOperationsPageState();
@@ -36,10 +38,8 @@ final class CatalogOperationsPage extends StatefulWidget {
 
 class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
   late final CatalogOperationsPort _operations;
-  late _OperationsSection _section;
+  late CatalogOperationsSection _section;
   var _conflictQueue = 'duplicates';
-  final _conflictAnchors = <String>[''];
-  final _mergeAnchors = <String>[''];
   var _conflictPage = 0;
   var _mergePage = 0;
   var _conflictGeneration = 0;
@@ -59,9 +59,14 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
     super.initState();
     _operations =
         widget.operationsPort ?? CatalogOperationsRepository(widget.api);
-    _section = widget.canCurate
-        ? _OperationsSection.identities
-        : _OperationsSection.conflicts;
+    _section =
+        widget.initialSection ??
+        (widget.canCurate
+            ? CatalogOperationsSection.identities
+            : CatalogOperationsSection.conflicts);
+    if (!widget.canCurate && _section != CatalogOperationsSection.conflicts) {
+      _section = CatalogOperationsSection.conflicts;
+    }
     if (widget.canReview) unawaited(_loadConflicts());
     if (widget.canCurate) unawaited(_loadMergeEvents());
   }
@@ -72,28 +77,28 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
     children: <Widget>[
       Row(
         children: <Widget>[
-          SegmentedButton<_OperationsSection>(
-            segments: <ButtonSegment<_OperationsSection>>[
+          SegmentedButton<CatalogOperationsSection>(
+            segments: <ButtonSegment<CatalogOperationsSection>>[
               if (widget.canCurate)
-                const ButtonSegment<_OperationsSection>(
-                  value: _OperationsSection.identities,
+                const ButtonSegment<CatalogOperationsSection>(
+                  value: CatalogOperationsSection.identities,
                   icon: Icon(Icons.manage_search),
                   label: Text('Published identities'),
                 ),
               if (widget.canReview)
-                const ButtonSegment<_OperationsSection>(
-                  value: _OperationsSection.conflicts,
+                const ButtonSegment<CatalogOperationsSection>(
+                  value: CatalogOperationsSection.conflicts,
                   icon: Icon(Icons.rule),
                   label: Text('Conflicts'),
                 ),
               if (widget.canCurate)
-                const ButtonSegment<_OperationsSection>(
-                  value: _OperationsSection.merges,
+                const ButtonSegment<CatalogOperationsSection>(
+                  value: CatalogOperationsSection.merges,
                   icon: Icon(Icons.merge),
                   label: Text('Reversible merges'),
                 ),
             ],
-            selected: <_OperationsSection>{_section},
+            selected: <CatalogOperationsSection>{_section},
             onSelectionChanged: _loading
                 ? null
                 : (selection) => setState(() {
@@ -122,9 +127,9 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
       const SizedBox(height: 12),
       Expanded(
         child: switch (_section) {
-          _OperationsSection.identities => _identities(),
-          _OperationsSection.conflicts => _conflictWorkbench(),
-          _OperationsSection.merges => _mergeWorkbench(),
+          CatalogOperationsSection.identities => _identities(),
+          CatalogOperationsSection.conflicts => _conflictWorkbench(),
+          CatalogOperationsSection.merges => _mergeWorkbench(),
         },
       ),
     ],
@@ -251,9 +256,6 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
                     setState(() {
                       _conflictQueue = value;
                       _conflictPage = 0;
-                      _conflictAnchors
-                        ..clear()
-                        ..add('');
                     });
                     unawaited(_loadConflicts());
                   },
@@ -266,9 +268,6 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
                 ? null
                 : () {
                     _conflictPage = 0;
-                    _conflictAnchors
-                      ..clear()
-                      ..add('');
                     unawaited(_loadConflicts());
                   },
             icon: const Icon(Icons.refresh),
@@ -420,9 +419,6 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
                           ? null
                           : () {
                               _mergePage = 0;
-                              _mergeAnchors
-                                ..clear()
-                                ..add('');
                               unawaited(_loadMergeEvents());
                             },
                       icon: const Icon(Icons.refresh),
@@ -473,14 +469,9 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
 
   Widget _pagination({required bool merges}) {
     final page = merges ? _mergePage : _conflictPage;
-    final anchors = merges ? _mergeAnchors : _conflictAnchors;
     final count = merges ? _mergeEvents.length : _conflicts.length;
     final name = merges ? 'merge history' : 'conflict';
     void move(bool forward) {
-      if (forward) {
-        anchors.removeRange(page + 1, anchors.length);
-        anchors.add(merges ? _mergeEvents.last.id : _conflicts.last.id);
-      }
       if (merges) {
         _mergePage += forward ? 1 : -1;
         unawaited(_loadMergeEvents());
@@ -546,8 +537,8 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
   Future<void> _chooseCategory() async {
     final category = await showPublishedCategoryPicker(
       context: context,
-      loadPage: (query, afterId) =>
-          _operations.searchCategories(query, limit: 50, afterId: afterId),
+      loadPage: (query, offset) =>
+          _operations.searchCategories(query, limit: 50, offset: offset),
     );
     if (mounted && category != null) {
       setState(() => _selectedCategory = category);
@@ -557,9 +548,9 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
   Future<void> _updateProductIcon() async {
     final product = _selectedProduct;
     if (product == null) return;
-    final command = await showDialog<CatalogIconCommand>(
+    final command = await showCatalogIconEditor(
       context: context,
-      builder: (_) => _CatalogIconDialog(product: product),
+      product: product,
     );
     if (command == null) return;
     final epoch = widget.session.authorizationEpoch;
@@ -587,7 +578,7 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
     try {
       final conflicts = await _operations.conflicts(
         _conflictQueue,
-        afterId: _conflictAnchors[_conflictPage],
+        offset: _conflictPage * 50,
       );
       if (_authorized(epoch) && generation == _conflictGeneration) {
         setState(() {
@@ -720,9 +711,7 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
     final generation = ++_mergeGeneration;
     _begin();
     try {
-      final events = await _operations.mergeEvents(
-        afterId: _mergeAnchors[_mergePage],
-      );
+      final events = await _operations.mergeEvents(offset: _mergePage * 50);
       if (_authorized(epoch) && generation == _mergeGeneration) {
         setState(() {
           _mergeEvents = events;
@@ -797,11 +786,11 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
 
   void _reloadSection() {
     switch (_section) {
-      case _OperationsSection.identities:
+      case CatalogOperationsSection.identities:
         setState(() => _safeMessage = null);
-      case _OperationsSection.conflicts:
+      case CatalogOperationsSection.conflicts:
         unawaited(_loadConflicts());
-      case _OperationsSection.merges:
+      case CatalogOperationsSection.merges:
         unawaited(_loadMergeEvents());
     }
   }
@@ -821,6 +810,14 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
       widget.session.phase == SessionPhase.authenticated &&
       widget.session.authorizationEpoch == epoch;
 }
+
+Future<CatalogIconCommand?> showCatalogIconEditor({
+  required BuildContext context,
+  required CatalogProductDetail product,
+}) => showDialog<CatalogIconCommand>(
+  context: context,
+  builder: (_) => _CatalogIconDialog(product: product),
+);
 
 final class _CatalogIconDialog extends StatefulWidget {
   const _CatalogIconDialog({required this.product});

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'catalog_models.dart';
 
 typedef CategoryPageLoader =
-    Future<List<PublishedCategory>> Function(String query, String afterId);
+    Future<List<PublishedCategory>> Function(String query, int offset);
 
 Future<PublishedCategory?> showPublishedCategoryPicker({
   required BuildContext context,
@@ -22,7 +22,6 @@ final class _CategoryPicker extends StatefulWidget {
 
 class _CategoryPickerState extends State<_CategoryPicker> {
   final _query = TextEditingController();
-  final _anchors = <String>[''];
   var _page = 0;
   var _generation = 0;
   var _loading = false;
@@ -45,9 +44,6 @@ class _CategoryPickerState extends State<_CategoryPicker> {
   Future<void> _load({bool restart = false}) async {
     if (restart) {
       _page = 0;
-      _anchors
-        ..clear()
-        ..add('');
     }
     final generation = ++_generation;
     setState(() {
@@ -56,7 +52,7 @@ class _CategoryPickerState extends State<_CategoryPicker> {
       _items = const [];
     });
     try {
-      final items = await widget.loadPage(_query.text.trim(), _anchors[_page]);
+      final items = await widget.loadPage(_query.text.trim(), _page * 50);
       if (!mounted || generation != _generation) return;
       setState(() {
         _items = items;
@@ -89,7 +85,7 @@ class _CategoryPickerState extends State<_CategoryPicker> {
             onSubmitted: (_) => _load(restart: true),
           ),
           const Text(
-            'Partial live list. Refresh to include records added behind the current page.',
+            'Live list. Refresh after catalog changes to restart paging.',
           ),
           Row(
             children: <Widget>[
@@ -109,8 +105,6 @@ class _CategoryPickerState extends State<_CategoryPicker> {
                 onPressed: _loading || _items.length < 50
                     ? null
                     : () {
-                        _anchors.removeRange(_page + 1, _anchors.length);
-                        _anchors.add(_items.last.id);
                         _page++;
                         unawaited(_load());
                       },
