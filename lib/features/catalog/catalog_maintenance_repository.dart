@@ -62,6 +62,7 @@ final class CatalogMaintenanceRepository {
   Future<List<CatalogEntity>> list(
     String type, {
     int offset = 0,
+    String query = '',
     String? productId,
   }) async {
     final response = await api.get(
