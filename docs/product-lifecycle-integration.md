@@ -1,10 +1,10 @@
-# Product lifecycle integration — API 2.1.0
+# Product lifecycle integration — API 2.2.0
 
 This implementation coordinates `providentia-systems/backend`,
 `providentia-systems/client` and `providentia-systems/admin`. Backend PR #22 uses
 `feat/product-lifecycle-integration`; Client PR #18 and Admin PR #10 use
 `feat/complete-lifecycle-integration` after the earlier client branches merged.
-The product name is Providentia.
+The product name is Providentia. The PR references above describe the initial lifecycle baseline. Read [Household workflows](household-workflows.md) for current API 2.2.0 compatibility and the distinct Client/Admin editor scopes.
 
 This is a source contract and acceptance guide, not evidence about a particular
 running deployment. A healthy older image does not prove the new operations exist.

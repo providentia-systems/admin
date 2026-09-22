@@ -111,3 +111,5 @@ Viewing or forking this repository on GitHub does not grant a licence. See the
 [LICENSE](LICENSE) file for the complete terms.
 
 See [Product lifecycle integration](docs/product-lifecycle-integration.md) for the coordinated API 2.1 implementation and outstanding acceptance gates.
+
+Current paired API and household editor boundaries: [Household metadata compatibility](docs/household-workflows.md).
