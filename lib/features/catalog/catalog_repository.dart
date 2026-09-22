@@ -14,34 +14,32 @@ final class CatalogRepository {
     String queue = 'proposals',
     int limit = 50,
     int offset = 0,
-    String? afterId,
   }) async {
     final response = await _api.get(
       '/api/v1/catalog-admin/workbench',
       query: <String, String>{
         'queue': queue,
         'limit': '$limit',
-        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
+        'offset': '$offset',
       },
     );
-    return _items(response.jsonObject['data']);
+    return _items(response.jsonObject['data'], queue: queue);
   }
 
   Future<List<CatalogQueueItem>> contributionReview({
     String? status,
     int limit = 50,
     int offset = 0,
-    String? afterId,
   }) async {
     final response = await _api.get(
       '/api/v1/catalog-contributions/review',
       query: <String, String>{
         'status': ?status,
         'limit': '$limit',
-        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
+        'offset': '$offset',
       },
     );
-    return _items(response.jsonObject['data']);
+    return _items(response.jsonObject['data'], queue: 'contributions');
   }
 
   Future<void> decideProposal({
@@ -80,14 +78,13 @@ final class CatalogRepository {
     String query = '',
     int limit = 100,
     int offset = 0,
-    String? afterId,
   }) async {
     final response = await _api.get(
       '/api/v1/catalog/categories',
       query: <String, String>{
         if (query.trim().isNotEmpty) 'q': query.trim(),
         'limit': '$limit',
-        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
+        'offset': '$offset',
       },
     );
     final data = response.jsonObject['data'];
@@ -163,13 +160,15 @@ final class CatalogRepository {
     );
   }
 
-  static List<CatalogQueueItem> _items(Object? data) {
+  static List<CatalogQueueItem> _items(Object? data, {required String queue}) {
     if (data is! List<Object?> ||
         data.any((item) => item is! Map<String, Object?>)) {
       throw const FormatException('Invalid catalog queue response.');
     }
     return List<CatalogQueueItem>.unmodifiable(
-      data.cast<Map<String, Object?>>().map(CatalogQueueItem.fromJson),
+      data.cast<Map<String, Object?>>().map(
+        (row) => CatalogQueueItem.fromJson(row, queue: queue),
+      ),
     );
   }
 

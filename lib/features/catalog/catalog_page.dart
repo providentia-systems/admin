@@ -36,9 +36,9 @@ class _CatalogPageState extends State<CatalogPage> {
   late final CatalogRepository _repository;
   late _CatalogLane _lane;
   var _queue = 'proposals';
+  CatalogOperationsSection? _operationsSection;
   var _contributionStatus = 'pending';
   var _offset = 0;
-  final _pageAnchors = <String>[''];
   var _loadGeneration = 0;
   var _mutating = false;
   String? _returnContributionId;
@@ -81,7 +81,8 @@ class _CatalogPageState extends State<CatalogPage> {
         if (widget.canReview || widget.canCurate)
           Align(
             alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
+            child: FilledButton.icon(
+              key: const Key('manage-catalog-entities'),
               icon: const Icon(Icons.edit_note),
               label: const Text('Manage catalog entities'),
               onPressed: () => Navigator.of(context).push<void>(
@@ -128,9 +129,6 @@ class _CatalogPageState extends State<CatalogPage> {
                       setState(() {
                         _lane = selection.single;
                         _offset = 0;
-                        _pageAnchors
-                          ..clear()
-                          ..add('');
                         _returnContributionId = null;
                         _selected = null;
                       });
@@ -152,7 +150,10 @@ class _CatalogPageState extends State<CatalogPage> {
                   ),
                   DropdownMenuItem(value: 'aliases', child: Text('Aliases')),
                   DropdownMenuItem(value: 'barcodes', child: Text('Barcodes')),
-                  DropdownMenuItem(value: 'icons', child: Text('Icons')),
+                  DropdownMenuItem(
+                    value: 'icons',
+                    child: Text('Products needing icons'),
+                  ),
                   DropdownMenuItem(value: 'merges', child: Text('Merges')),
                 ],
                 onChanged: _mutating
@@ -162,12 +163,6 @@ class _CatalogPageState extends State<CatalogPage> {
                         setState(() {
                           _queue = value;
                           _offset = 0;
-                          _pageAnchors
-                            ..clear()
-                            ..add('');
-                          _pageAnchors
-                            ..clear()
-                            ..add('');
                           _selected = null;
                         });
                         unawaited(_load());
@@ -200,12 +195,6 @@ class _CatalogPageState extends State<CatalogPage> {
                         setState(() {
                           _contributionStatus = value;
                           _offset = 0;
-                          _pageAnchors
-                            ..clear()
-                            ..add('');
-                          _pageAnchors
-                            ..clear()
-                            ..add('');
                           _selected = null;
                         });
                         unawaited(_load());
@@ -229,11 +218,6 @@ class _CatalogPageState extends State<CatalogPage> {
                 onPressed: _loading || _mutating || _items.length < 50
                     ? null
                     : () {
-                        _pageAnchors.removeRange(
-                          _offset ~/ 50 + 1,
-                          _pageAnchors.length,
-                        );
-                        _pageAnchors.add(_items.last.id);
                         _offset += 50;
                         _selected = null;
                         unawaited(_load());
@@ -248,9 +232,6 @@ class _CatalogPageState extends State<CatalogPage> {
                     ? null
                     : () {
                         _offset = 0;
-                        _pageAnchors
-                          ..clear()
-                          ..add('');
                         unawaited(_load());
                       },
                 icon: const Icon(Icons.refresh),
@@ -271,6 +252,8 @@ class _CatalogPageState extends State<CatalogPage> {
         Expanded(
           child: _lane == _CatalogLane.operations
               ? CatalogOperationsPage(
+                  key: ValueKey(_operationsSection),
+                  initialSection: _operationsSection,
                   api: widget.api,
                   session: widget.session,
                   canReview: widget.canReview,
@@ -337,6 +320,8 @@ class _CatalogPageState extends State<CatalogPage> {
                                 onPreview: _loadPreview,
                                 onLinkProposal: _linkProposal,
                                 onPublishImage: _publishImage,
+                                onManageIcon: _manageIcon,
+                                onOpenOperations: _openOperations,
                               ),
                       ),
                     ),
@@ -356,11 +341,6 @@ class _CatalogPageState extends State<CatalogPage> {
     final queue = _queue;
     final selectedId = focusId ?? _selected?.id;
     var offset = focusId == null ? _offset : 0;
-    if (focusId != null) {
-      _pageAnchors
-        ..clear()
-        ..add('');
-    }
     _clearPreview();
     setState(() {
       _selected = null;
@@ -373,13 +353,10 @@ class _CatalogPageState extends State<CatalogPage> {
     try {
       while (current()) {
         final items = lane == _CatalogLane.proposals
-            ? await _repository.workbench(
-                queue: queue,
-                afterId: _pageAnchors[offset ~/ 50],
-              )
+            ? await _repository.workbench(queue: queue, offset: offset)
             : await _repository.contributionReview(
                 status: status,
-                afterId: _pageAnchors[offset ~/ 50],
+                offset: offset,
               );
         if (!current()) return;
         final selected = items
@@ -388,7 +365,6 @@ class _CatalogPageState extends State<CatalogPage> {
         // A just-approved item may not be on the first approved page. Seek it
         // using the existing bounded queue operation, never a private source.
         if (focusId != null && selected == null && items.length == 50) {
-          _pageAnchors.add(items.last.id);
           offset += 50;
           continue;
         }
@@ -411,7 +387,14 @@ class _CatalogPageState extends State<CatalogPage> {
 
   Future<void> _decide(bool approve) async {
     final item = _selected;
-    if (item == null || _mutating || _loading) return;
+    if (item == null ||
+        _mutating ||
+        _loading ||
+        !widget.canReview ||
+        !item.canDecide ||
+        (_lane == _CatalogLane.proposals && !item.isProposal) ||
+        (_lane == _CatalogLane.contributions && !item.isContribution))
+      return;
     final epoch = widget.session.authorizationEpoch;
     final lane = _lane;
     if (approve && lane == _CatalogLane.proposals && !widget.canCurate) return;
@@ -470,6 +453,61 @@ class _CatalogPageState extends State<CatalogPage> {
     }
   }
 
+  void _openOperations() {
+    final item = _selected;
+    if (item == null ||
+        _loading ||
+        _mutating ||
+        (item.recordType == CatalogQueueRecordType.merge
+            ? !widget.canCurate
+            : !widget.canReview))
+      return;
+    _clearPreview();
+    setState(() {
+      _operationsSection = item.recordType == CatalogQueueRecordType.merge
+          ? CatalogOperationsSection.merges
+          : CatalogOperationsSection.conflicts;
+      _lane = _CatalogLane.operations;
+      _selected = null;
+    });
+    unawaited(_load());
+  }
+
+  Future<void> _manageIcon() async {
+    final item = _selected;
+    if (item == null ||
+        !item.isMissingIcon ||
+        !widget.canCurate ||
+        _loading ||
+        _mutating)
+      return;
+    final epoch = widget.session.authorizationEpoch;
+    setState(() => _mutating = true);
+    final operations = CatalogOperationsRepository(widget.api);
+    try {
+      // Product revision and icon revision are different concurrency tokens.
+      final product = await operations.product(item.id);
+      if (!_isAuthorized(epoch)) return;
+      final command = await showCatalogIconEditor(
+        context: context,
+        product: product,
+      );
+      if (command == null || !_isAuthorized(epoch)) return;
+      await operations.putIcon(command);
+      if (_isAuthorized(epoch)) await _load();
+    } on Object catch (error) {
+      if (!_isAuthorized(epoch)) return;
+      _snack(
+        error is CatalogOperationsFailure
+            ? error.safeMessage
+            : 'The icon result could not be confirmed. Reload its current state before retrying.',
+      );
+      await _load();
+    } finally {
+      if (_isAuthorized(epoch)) setState(() => _mutating = false);
+    }
+  }
+
   Future<void> _loadPreview() async {
     final item = _selected;
     if (item == null || _mutating || _loading) return;
@@ -513,8 +551,8 @@ class _CatalogPageState extends State<CatalogPage> {
     try {
       final category = await showPublishedCategoryPicker(
         context: context,
-        loadPage: (query, afterId) =>
-            _repository.categories(query: query, limit: 50, afterId: afterId),
+        loadPage: (query, offset) =>
+            _repository.categories(query: query, limit: 50, offset: offset),
       );
       if (category == null || !_isAuthorized(epoch)) return;
       await _repository.linkContributionProposal(
@@ -644,7 +682,9 @@ class _CatalogPageState extends State<CatalogPage> {
 
   static String _safeApiMessage(ApiException error) => error.isConflict
       ? 'This item changed on the server. The queue was reloaded.'
-      : 'The moderation operation was rejected (HTTP ${error.statusCode}).';
+      : error.statusCode == 404
+      ? 'The selected moderation record is no longer available. Reload the queue and select its current record.'
+      : 'The moderation operation was rejected (HTTP ${error.statusCode}). Reload the queue before retrying.';
 }
 
 @visibleForTesting
@@ -659,6 +699,8 @@ final class CatalogModerationDetail extends StatelessWidget {
     required this.onPreview,
     required this.onLinkProposal,
     required this.onPublishImage,
+    this.onManageIcon,
+    this.onOpenOperations,
     super.key,
   });
 
@@ -671,6 +713,8 @@ final class CatalogModerationDetail extends StatelessWidget {
   final VoidCallback onPreview;
   final VoidCallback onLinkProposal;
   final VoidCallback onPublishImage;
+  final VoidCallback? onManageIcon;
+  final VoidCallback? onOpenOperations;
 
   @override
   Widget build(BuildContext context) {
@@ -702,6 +746,36 @@ final class CatalogModerationDetail extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 3),
               child: SelectableText('${entry.key}: ${entry.value}'),
             ),
+        if (item.isMissingIcon) ...<Widget>[
+          const Text(
+            'This product is already published. It needs an icon, not proposal approval. '
+            'Review submitted images separately in Contributions.',
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            key: const Key('manage-missing-product-icon'),
+            onPressed: canCurate ? onManageIcon : null,
+            icon: const Icon(Icons.add_photo_alternate_outlined),
+            label: const Text('Add / manage icon'),
+          ),
+        ],
+        if (item.recordType == CatalogQueueRecordType.conflict ||
+            item.recordType == CatalogQueueRecordType.merge) ...<Widget>[
+          const SizedBox(height: 16),
+          OutlinedButton(
+            onPressed:
+                (item.recordType == CatalogQueueRecordType.merge
+                    ? canCurate
+                    : canReview)
+                ? onOpenOperations
+                : null,
+            child: Text(
+              item.recordType == CatalogQueueRecordType.merge
+                  ? 'Open reversible merges'
+                  : 'Open conflict resolution',
+            ),
+          ),
+        ],
         if (storePriceContribution && storePrice != null) ...<Widget>[
           const Divider(height: 32),
           _StorePriceModerationView(price: storePrice),
@@ -740,7 +814,7 @@ final class CatalogModerationDetail extends StatelessWidget {
           ),
         ],
         const Divider(height: 32),
-        if (canReview && item.status == 'pending')
+        if (canReview && item.canDecide)
           Wrap(
             spacing: 8,
             children: <Widget>[

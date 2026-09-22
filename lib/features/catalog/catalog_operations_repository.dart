@@ -33,13 +33,11 @@ abstract interface class CatalogOperationsPort {
     String query, {
     int limit = 100,
     int offset = 0,
-    String? afterId,
   });
   Future<List<CatalogConflict>> conflicts(
     String queue, {
     int limit = 50,
     int offset = 0,
-    String? afterId,
   });
   Future<void> keepExisting({
     required CatalogConflict conflict,
@@ -54,11 +52,7 @@ abstract interface class CatalogOperationsPort {
     required CatalogMergePreview preview,
     required String reason,
   });
-  Future<List<CatalogMergeEvent>> mergeEvents({
-    int limit = 50,
-    int offset = 0,
-    String? afterId,
-  });
+  Future<List<CatalogMergeEvent>> mergeEvents({int limit = 50, int offset = 0});
   Future<CatalogMergeResult> reverseMerge({
     required CatalogMergeEvent event,
     required String reason,
@@ -114,7 +108,6 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
     String query, {
     int limit = 100,
     int offset = 0,
-    String? afterId,
   }) => _run(() async {
     final cleaned = query.trim();
     if (cleaned.length > 191) {
@@ -128,7 +121,7 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
       query: <String, String>{
         if (cleaned.isNotEmpty) 'q': cleaned,
         'limit': '$limit',
-        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
+        'offset': '$offset',
       },
     );
     final data = response.jsonObject['data'];
@@ -150,7 +143,6 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
     String queue, {
     int limit = 50,
     int offset = 0,
-    String? afterId,
   }) => _run(() async {
     if (!const <String>{'duplicates', 'aliases', 'barcodes'}.contains(queue)) {
       throw const CatalogOperationsFailure(
@@ -163,7 +155,7 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
       query: <String, String>{
         'queue': queue,
         'limit': '$limit',
-        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
+        'offset': '$offset',
       },
     );
     final data = response.jsonObject['data'];
@@ -296,14 +288,13 @@ final class CatalogOperationsRepository implements CatalogOperationsPort {
   Future<List<CatalogMergeEvent>> mergeEvents({
     int limit = 50,
     int offset = 0,
-    String? afterId,
   }) => _run(() async {
     final response = await _api.get(
       '/api/v1/catalog-admin/workbench',
       query: <String, String>{
         'queue': 'merges',
         'limit': '$limit',
-        if (afterId == null) 'offset': '$offset' else 'afterId': afterId,
+        'offset': '$offset',
       },
     );
     final data = response.jsonObject['data'];
