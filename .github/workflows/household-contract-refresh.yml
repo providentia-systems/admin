@@ -1,0 +1,71 @@
+name: Paired household contract refresh
+
+on:
+  push:
+    branches: [fix/client-household-workflows]
+    paths: [.github/workflows/household-contract-refresh.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: admin
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/client-household-workflows
+          path: admin
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: providentia-systems/backend
+          ref: 4f7813ce21d90f03b3eec6c84ca907e32701640c
+          path: backend
+          persist-credentials: false
+      - name: Copy and verify the backend-owned contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import gzip, hashlib, json
+          root = Path.cwd()
+          archive = (root.parent / 'backend/contracts/source/providentia-v1.json.gz').read_bytes()
+          raw = gzip.decompress(archive)
+          digest = 'ef5714a6298326d6fb449b966117e8b61c74de67d1bfc274ad8ec431aecd802d'
+          compressed = 'd20ba3f9b769b5e30e59f38ecb83816ff6825a9bb646509440fb731cfc012ff1'
+          assert hashlib.sha256(raw).hexdigest() == digest
+          assert hashlib.sha256(archive).hexdigest() == compressed
+          (root / 'contracts/source/providentia-v1.json.gz').write_bytes(archive)
+          (root / 'contracts/providentia-v1.json').write_bytes(raw)
+          path = root / 'contracts/contract.lock.json'
+          lock = json.loads(path.read_text())
+          lock['apiVersion'] = lock['version'] = '2.2.0'
+          lock['sha256'] = digest
+          lock['artifacts']['providentia-v1.json']['sha256'] = digest
+          path.write_text(json.dumps(lock, indent=2) + '\n')
+          for name in ('tool/materialize_contract.sh', 'tool/verify_contract.mjs', 'tools/verify-structure.sh'):
+              path = root / name
+              source = path.read_text().replace('2.1.0', '2.2.0').replace('13ccdc2d37e73955394a7b7c52da6d9ff7aeefdfd763ac809876737867d15c44', digest).replace('bd106bdfd980823459ec3c769e8aad14cf6c2a2473b38c4708f9e59e635b34cd', compressed)
+              path.write_text(source)
+          PY
+          node tool/generate_admin_api_client.mjs
+      - name: Format generated bindings with the pinned toolchain
+        run: |
+          bash tool/install_flutter_linux.sh "$RUNNER_TEMP/providentia-sdk"
+          export PATH="$RUNNER_TEMP/providentia-sdk/flutter/bin:$PATH"
+          flutter pub get --enforce-lockfile
+          dart format contracts/generated/providentia_api_client/lib
+          bash tools/verify-structure.sh
+          git diff --check
+      - name: Commit exact compatibility changes and remove this temporary workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- contracts tool/materialize_contract.sh tool/verify_contract.mjs tools/verify-structure.sh
+          git rm -- .github/workflows/household-contract-refresh.yml
+          git commit -m 'chore: align Admin bindings with household metadata API 2.2.0'
+          git push origin HEAD:fix/client-household-workflows
