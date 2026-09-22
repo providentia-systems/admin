@@ -67,7 +67,11 @@ final class CatalogMaintenanceRepository {
   }) async {
     final response = await api.get(
       '/api/v1/catalog-admin/entities/$type',
-      query: {'offset': '$offset', 'productId': ?productId},
+      query: {
+        'offset': '$offset',
+        if (query.trim().isNotEmpty) 'q': query.trim(),
+        'productId': ?productId,
+      },
     );
     final rows = (response.jsonObject['data'] as List<Object?>)
         .map((row) => CatalogEntity.fromJson(row! as Map<String, Object?>))
