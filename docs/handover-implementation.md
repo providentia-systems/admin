@@ -1,43 +1,67 @@
 # Handover implementation record — 22 September 2026
 
-## Scope and baseline
+## Delivered scope
 
-This branch implements the supplied owner handover in the existing architecture.
-The source baseline was admin `f8d189a99f9e824840994b9595d4c06779d40a09`,
-backend `544b789a44f64c50ed5274e46c8050fdee881180`, and client
-`e491419f7c1d3694303f4277204385bd4bca21e8`. The historical Admin button branch
-had no changes ahead of main. Production executables and owner databases were
-not supplied; source and CI results do not establish deployment or recovery.
+This branch is a tested subset of the supplied complete handover, not a claim
+that all cross-repository requirements or historical recovery are finished.
+The starting Admin commit was f8d189a99f9e824840994b9595d4c06779d40a09.
+The older catalog-button branch had no unique commits ahead of main.
 
-## Catalog workbench
+### Catalog actions and pagination
 
-The workbench now distinguishes proposals, consent-bound contributions,
-missing-icon products, identity conflicts, and merge history. Product targets
-in the Icons queue are already published products, not pending proposals. They
-retain their real target IDs and cannot invoke proposal decisions. The queue
-is labelled **Products needing icons** and opens the existing icon editor only
-after fetching the current product and icon revision. Actual submitted-image
-review remains separate and retains its no-store, bounded, digest-verified
-preview and explicit approved-revision publication path.
+Workbench records explicitly distinguish proposals, consent-bound contributions,
+missing-icon products, identity conflicts and merge history. Products needing
+icons retain real product target IDs and can never invoke proposal approval.
+The action fetches the current product/icon revision and reuses the existing
+icon editor. Submitted-image review remains a separate consent-bound,
+bounded, digest-verified preview and explicit publication workflow.
 
-Workbench, contribution, category, conflict and merge lists use the backend's
-existing offset contract. No client-only cursor or invented unknown identity
-is sent. Selection is reset when the queue changes, and old asynchronous
-responses remain guarded by request generation and authorization epoch.
+Workbench, category, contribution, conflict and merge lists use the backend's
+supported offset contract. Tests cover 101 same-name targets, later/empty pages,
+malformed records and action-specific controls. Queue/request generation and
+permission epoch guards remain in place.
 
-The **Manage catalog entities** entry uses the existing primary filled theme.
-This does not change who can review or curate catalog records.
+### Direct catalog maintenance
 
-## Verification and remaining work
+Manage catalog entities is a primary filled action. Products and Categories
+have direct entries, searchable paged lists, Add actions and row-to-editor
+navigation. Existing advanced identity types and product-scoped relationships
+remain available. Queries run on the backend before offset pagination, not on
+just the visible page. Switching entity types preserves each query and page.
+Fields use spaced, bounded scrollable forms. Changed editors require an explicit
+discard choice. Revision and uncertain-mutation reload guards remain active.
 
-`test/features/handover_workbench_test.dart` covers 101 same-name icon targets,
-empty and later pages, typed action boundaries, malformed targets, icon-only
-actions and category page navigation. The existing image-publication and
-privacy tests remain applicable. Test results belong to the exact reported CI
-head; this document does not claim unrun checks passed.
+Routine changes use visible contextual audit reasons. Other requires actual
+nonblank text, bounded to 500 characters. This does not bypass authorization,
+revision checking or the backend audit trail.
 
-The other handover workstreams — historical synchronization recovery,
-provenance/order/diagnostics, relationship repair, effective household
-projections, unified categories and publication, household name/measurement
-customization, contextual reasons and complete integrated delivery — are not
-claimed complete by this initial change.
+## Paired contract
+
+The optional maintenance-list q parameter is mirrored from the backend-owned
+contract. All paired repositories use JSON SHA-256
+13ccdc2d37e73955394a7b7c52da6d9ff7aeefdfd763ac809876737867d15c44.
+Deploy the companion backend change before relying on cross-page search.
+Generated Admin operations and existing privacy allowlists are retained.
+
+## Verification
+
+Branch validation run 35718161132 passed structure/contract verification,
+strict analysis, the complete Admin test suite and the existing coverage gate
+against source commit 037157bfdb3c50785d550829c574650e428d5f27.
+Temporary editing/validation scripts are removed from the final change tree.
+The original PR quality, packaging and security workflows must pass on the
+final head; the earlier result is not evidence for an untested later commit.
+
+## Explicitly outstanding handover work
+
+The complete effective household product projection and its tenant-safe joins,
+operator household override editor with catalog deep-link return context,
+unified inherit/none/local/global category workflows, local-category publication,
+private name/unit/pack customization, historical queue recovery, complete
+sanitized diagnostic exports, and the remaining contextual-reason surfaces
+are not implemented by this Admin change. The companion synchronization work
+must not be mistaken for completed owner-data recovery.
+
+No production database, installed executable, live home or deployment was
+changed or verified. No merge was performed. Back up the real native database
+before any owner recovery; do not clear or silently rebind its pending work.
