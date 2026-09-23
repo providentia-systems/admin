@@ -134,6 +134,129 @@ void main() {
     );
   }
 
+  for (final size in [const Size(720, 700), const Size(1440, 900)]) {
+    testWidgets(
+      'household product identity precedes raw overrides at ${size.width}px',
+      (tester) async {
+        final api = FakeApi((request) async {
+          if (request.path.endsWith('/image')) {
+            return ApiResponse(
+              statusCode: 204,
+              headers: {},
+              bytes: Uint8List(0),
+            );
+          }
+          if (request.path.endsWith('/homes')) {
+            return jsonResponse({
+              'data': [
+                {'id': 'home-a', 'name': 'Family'},
+              ],
+            });
+          }
+          if (request.path.endsWith('/home-a')) {
+            return jsonResponse({'id': 'home-a', 'name': 'Family'});
+          }
+          return jsonResponse({
+            'data': [
+              {
+                'id': 'linked',
+                'home_id': 'home-a',
+                'product_id': 'catalog-rice',
+                'private_name': null,
+                'original_pack_text': null,
+                'name': 'Basmati rice',
+                'brand': 'Test brand',
+                'pack_text': '5 kg bag',
+                'category_name': 'Food',
+                'category_scope': 'Global',
+                'catalog_reference': 'Catalog linked',
+              },
+              {
+                'id': 'private',
+                'home_id': 'home-a',
+                'product_id': null,
+                'private_name': 'Garden beans',
+                'original_pack_text': 'Harvest basket',
+                'name': 'Garden beans',
+                'brand': '',
+                'pack_text': 'Harvest basket',
+                'category_name': 'My pantry',
+                'category_scope': 'Local',
+                'catalog_reference': 'Private product',
+              },
+              {
+                'id': 'broken',
+                'home_id': 'home-a',
+                'product_id': 'missing-product-id',
+                'private_name': null,
+                'original_pack_text': null,
+                'name': 'Unresolved product',
+                'brand': '',
+                'pack_text': 'Not specified',
+                'category_name': 'Uncategorized',
+                'category_scope': '',
+                'catalog_reference': 'Missing catalog product',
+              },
+            ],
+          });
+        });
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildAdminTheme(),
+            home: Scaffold(
+              body: OperatorRecordsPage(
+                session: await _session(),
+                api: api,
+                authorization: OperatorAuthorization.fromPermissions([
+                  'homes.read',
+                ]),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Open Family'));
+        await tester.pumpAndSettle();
+        final table = tester.widget<DataTable>(find.byType(DataTable));
+        expect(
+          table.columns.take(6).map((column) => (column.label as Text).data),
+          [
+            'Product',
+            'Brand',
+            'Pack',
+            'Category',
+            'Category Scope',
+            'Catalog Reference',
+          ],
+        );
+        expect(find.text('Basmati rice'), findsOneWidget);
+        expect(find.text('5 kg bag'), findsOneWidget);
+        expect(find.text('Garden beans'), findsWidgets);
+        expect(find.text('My pantry'), findsOneWidget);
+        expect(find.text('Missing catalog product'), findsOneWidget);
+        expect(find.text('missing-product-id'), findsOneWidget);
+        expect(find.text('No private override'), findsNWidgets(4));
+        expect(find.text('Private name override'), findsOneWidget);
+        expect(find.text('Private pack override'), findsOneWidget);
+        expect(find.text('Edit record'), findsNothing);
+        expect(
+          api.requests.where((request) => request.method != 'GET'),
+          isEmpty,
+        );
+        expect(
+          api.requests
+              .where((request) => request.path.contains('/records/'))
+              .single
+              .path,
+          '/api/v1/admin/homes/home-a/records/products',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'home inspection uses operator routes and limits people collections to delegated access',
     (tester) async {
