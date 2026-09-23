@@ -1,0 +1,152 @@
+diff --git a/lib/features/workspace/operator_records_page.dart b/lib/features/workspace/operator_records_page.dart
+index ef3cd5d..9a98579 100644
+--- a/lib/features/workspace/operator_records_page.dart
++++ b/lib/features/workspace/operator_records_page.dart
+@@ -223,7 +223,11 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
+ 
+   @override
+   Widget build(BuildContext context) {
++    final productRows = _home != null && _collection == 'products' && !widget.audit;
+     final keys = <String>{
++      if (productRows) ...const [
++        'name', 'brand', 'pack_text', 'category_name', 'category_scope', 'catalog_reference',
++      ],
+       for (final row in _rows) ...row.keys,
+     }.where((key) => key != 'home_id').toList();
+     return Padding(
+@@ -396,7 +400,9 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
+                         if (_home == null && !widget.audit)
+                           const DataColumn(label: Text('Open')),
+                         for (final key in keys)
+-                          DataColumn(label: Text(displayLabel(key))),
++                          DataColumn(
++                            label: Text(productRows ? _productLabel(key) : displayLabel(key)),
++                          ),
+                       ],
+                       rows: <DataRow>[
+                         for (final row in _rows)
+@@ -438,7 +444,7 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
+                                     identifier: isAdminIdentifierColumn(key),
+                                     value: row[key] is Map || row[key] is List
+                                         ? jsonEncode(row[key])
+-                                        : '${row[key] ?? ''}',
++                                        : productRows ? _productValue(row, key) : '${row[key] ?? ''}',
+                                   ),
+                                 ),
+                             ],
+@@ -478,3 +484,30 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
+     );
+   }
+ }
++
++String _productLabel(String key) => switch (key) {
++  'name' => 'Product',
++  'brand' => 'Brand',
++  'category_scope' => 'Category Scope',
++  'catalog_reference' => 'Catalog Reference',
++  'pack_text' => 'Pack',
++  'category_name' => 'Category',
++  'private_name' => 'Private name override',
++  'original_pack_text' => 'Private pack override',
++  _ => displayLabel(key),
++};
++
++String _productValue(Record row, String key) {
++  String? text(String field) {
++    final value = row[field];
++    return value is String && value.trim().isNotEmpty ? value : null;
++  }
++
++  return switch (key) {
++    'name' => text('name') ?? text('private_name') ?? 'Unresolved product',
++    'pack_text' => text('pack_text') ?? text('original_pack_text') ?? 'Not specified',
++    'category_name' => text('category_name') ?? 'Unavailable',
++    'private_name' || 'original_pack_text' => text(key) ?? 'No private override',
++    _ => '${row[key] ?? ''}',
++  };
++}
+diff --git a/test/features/operator_records_page_test.dart b/test/features/operator_records_page_test.dart
+index 6cd0bdc..42af1cd 100644
+--- a/test/features/operator_records_page_test.dart
++++ b/test/features/operator_records_page_test.dart
+@@ -134,6 +134,80 @@ void main() {
+     );
+   }
+ 
++  for (final size in [const Size(720, 700), const Size(1440, 900)]) {
++    testWidgets(
++      'household product identity precedes raw overrides at ${size.width}px',
++      (tester) async {
++        final api = FakeApi((request) async {
++          if (request.path.endsWith('/image')) {
++            return ApiResponse(statusCode: 204, headers: {}, bytes: Uint8List(0));
++          }
++          if (request.path.endsWith('/homes')) {
++            return jsonResponse({'data': [{'id': 'home-a', 'name': 'Family'}]});
++          }
++          if (request.path.endsWith('/home-a')) {
++            return jsonResponse({'id': 'home-a', 'name': 'Family'});
++          }
++          return jsonResponse({
++            'data': [
++              {
++                'id': 'linked', 'home_id': 'home-a', 'product_id': 'catalog-rice',
++                'private_name': null, 'original_pack_text': null,
++                'name': 'Basmati rice', 'brand': 'Test brand', 'pack_text': '5 kg bag',
++                'category_name': 'Food', 'category_scope': 'Global',
++                'catalog_reference': 'Catalog linked',
++              },
++              {
++                'id': 'private', 'home_id': 'home-a', 'product_id': null,
++                'private_name': 'Garden beans', 'original_pack_text': 'Harvest basket',
++                'name': 'Garden beans', 'brand': '', 'pack_text': 'Harvest basket',
++                'category_name': 'My pantry', 'category_scope': 'Local',
++                'catalog_reference': 'Private product',
++              },
++              {
++                'id': 'broken', 'home_id': 'home-a', 'product_id': 'missing-product-id',
++                'private_name': null, 'original_pack_text': null,
++                'name': 'Unresolved product', 'brand': '', 'pack_text': 'Not specified',
++                'category_name': 'Uncategorized', 'category_scope': '',
++                'catalog_reference': 'Missing catalog product',
++              },
++            ],
++          });
++        });
++        await tester.binding.setSurfaceSize(size);
++        addTearDown(() => tester.binding.setSurfaceSize(null));
++        await tester.pumpWidget(MaterialApp(
++          theme: buildAdminTheme(),
++          home: Scaffold(body: OperatorRecordsPage(
++            session: await _session(), api: api,
++            authorization: OperatorAuthorization.fromPermissions(['homes.read']),
++          )),
++        ));
++        await tester.pumpAndSettle();
++        await tester.tap(find.byTooltip('Open Family'));
++        await tester.pumpAndSettle();
++        final table = tester.widget<DataTable>(find.byType(DataTable));
++        expect(table.columns.take(6).map((column) => (column.label as Text).data), [
++          'Product', 'Brand', 'Pack', 'Category', 'Category Scope', 'Catalog Reference',
++        ]);
++        expect(find.text('Basmati rice'), findsOneWidget);
++        expect(find.text('5 kg bag'), findsOneWidget);
++        expect(find.text('Garden beans'), findsWidgets);
++        expect(find.text('My pantry'), findsOneWidget);
++        expect(find.text('Missing catalog product'), findsOneWidget);
++        expect(find.text('missing-product-id'), findsOneWidget);
++        expect(find.text('No private override'), findsNWidgets(4));
++        expect(find.text('Private name override'), findsOneWidget);
++        expect(find.text('Private pack override'), findsOneWidget);
++        expect(find.text('Edit record'), findsNothing);
++        expect(api.requests.where((request) => request.method != 'GET'), isEmpty);
++        expect(api.requests.where((request) => request.path.contains('/records/')).single.path,
++          '/api/v1/admin/homes/home-a/records/products');
++        expect(tester.takeException(), isNull);
++      },
++    );
++  }
++
+   testWidgets(
+     'home inspection uses operator routes and limits people collections to delegated access',
+     (tester) async {
