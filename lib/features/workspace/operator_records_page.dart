@@ -223,7 +223,17 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final productRows =
+        _home != null && _collection == 'products' && !widget.audit;
     final keys = <String>{
+      if (productRows) ...const [
+        'name',
+        'brand',
+        'pack_text',
+        'category_name',
+        'category_scope',
+        'catalog_reference',
+      ],
       for (final row in _rows) ...row.keys,
     }.where((key) => key != 'home_id').toList();
     return Padding(
@@ -396,7 +406,13 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
                         if (_home == null && !widget.audit)
                           const DataColumn(label: Text('Open')),
                         for (final key in keys)
-                          DataColumn(label: Text(displayLabel(key))),
+                          DataColumn(
+                            label: Text(
+                              productRows
+                                  ? _productLabel(key)
+                                  : displayLabel(key),
+                            ),
+                          ),
                       ],
                       rows: <DataRow>[
                         for (final row in _rows)
@@ -438,6 +454,8 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
                                     identifier: isAdminIdentifierColumn(key),
                                     value: row[key] is Map || row[key] is List
                                         ? jsonEncode(row[key])
+                                        : productRows
+                                        ? _productValue(row, key)
                                         : '${row[key] ?? ''}',
                                   ),
                                 ),
@@ -477,4 +495,33 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
       ),
     );
   }
+}
+
+String _productLabel(String key) => switch (key) {
+  'name' => 'Product',
+  'brand' => 'Brand',
+  'category_scope' => 'Category Scope',
+  'catalog_reference' => 'Catalog Reference',
+  'pack_text' => 'Pack',
+  'category_name' => 'Category',
+  'private_name' => 'Private name override',
+  'original_pack_text' => 'Private pack override',
+  _ => displayLabel(key),
+};
+
+String _productValue(Record row, String key) {
+  String? text(String field) {
+    final value = row[field];
+    return value is String && value.trim().isNotEmpty ? value : null;
+  }
+
+  return switch (key) {
+    'name' => text('name') ?? text('private_name') ?? 'Unresolved product',
+    'pack_text' =>
+      text('pack_text') ?? text('original_pack_text') ?? 'Not specified',
+    'category_name' => text('category_name') ?? 'Unavailable',
+    'private_name' ||
+    'original_pack_text' => text(key) ?? 'No private override',
+    _ => '${row[key] ?? ''}',
+  };
 }
