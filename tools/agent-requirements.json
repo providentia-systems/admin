@@ -43,6 +43,7 @@
       "pkg-config",
       "ripgrep",
       "unzip",
+      "x11-utils",
       "xdg-user-dirs",
       "xvfb",
       "xz-utils",
