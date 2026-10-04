@@ -46,13 +46,13 @@ EOF
 chmod 0755 "${FIXTURE_ROOT}/bin/ldconfig"
 
 GOOD_ROOT="${FIXTURE_ROOT}/good"
-make_fixture "${GOOD_ROOT}" 'libegl1, libgles2, libgtk-3-0, libsecret-1-0'
+make_fixture "${GOOD_ROOT}" 'libegl1, libgles2, libgtk-3-0, libsecret-1-0, xdg-user-dirs'
 dpkg-deb --root-owner-group --build "${GOOD_ROOT}" "${FIXTURE_ROOT}/good.deb" >/dev/null
 PATH="${FIXTURE_ROOT}/bin:${PATH}" \
   bash "${ROOT}/tool/verify_linux_deb.sh" "${FIXTURE_ROOT}/good.deb" >/dev/null
 
 URI_ROOT="${FIXTURE_ROOT}/retired-uri"
-make_fixture "${URI_ROOT}" 'libegl1, libgles2, libgtk-3-0, libsecret-1-0'
+make_fixture "${URI_ROOT}" 'libegl1, libgles2, libgtk-3-0, libsecret-1-0, xdg-user-dirs'
 cat >> "${URI_ROOT}/usr/share/applications/com.vastdevelopmentmethod.providentia.admin.desktop" <<'EOF'
 MimeType=x-scheme-handler/providentia-admin;
 EOF
@@ -65,7 +65,7 @@ if PATH="${FIXTURE_ROOT}/bin:${PATH}" \
 fi
 
 BAD_ROOT="${FIXTURE_ROOT}/bad"
-make_fixture "${BAD_ROOT}" 'libegl1, libgtk-3-0, libsecret-1-0'
+make_fixture "${BAD_ROOT}" 'libegl1, libgtk-3-0, libsecret-1-0, xdg-user-dirs'
 dpkg-deb --root-owner-group --build "${BAD_ROOT}" "${FIXTURE_ROOT}/bad.deb" >/dev/null
 if PATH="${FIXTURE_ROOT}/bin:${PATH}" \
   bash "${ROOT}/tool/verify_linux_deb.sh" "${FIXTURE_ROOT}/bad.deb" \
@@ -73,6 +73,17 @@ if PATH="${FIXTURE_ROOT}/bin:${PATH}" \
   echo 'Verifier accepted a package without the libgles2 runtime dependency.' >&2
   exit 1
 fi
+
+NO_XDG_ROOT="${FIXTURE_ROOT}/no-xdg"
+make_fixture "${NO_XDG_ROOT}" 'libegl1, libgles2, libgtk-3-0, libsecret-1-0'
+dpkg-deb --root-owner-group --build "${NO_XDG_ROOT}" "${FIXTURE_ROOT}/no-xdg.deb" >/dev/null
+if PATH="${FIXTURE_ROOT}/bin:${PATH}" \
+  bash "${ROOT}/tool/verify_linux_deb.sh" "${FIXTURE_ROOT}/no-xdg.deb" \
+  >"${FIXTURE_ROOT}/no-xdg.log" 2>&1; then
+  echo 'Verifier accepted a package without xdg-user-dirs.' >&2
+  exit 1
+fi
+grep -Fq 'missing runtime dependency: xdg-user-dirs' "${FIXTURE_ROOT}/no-xdg.log"
 
 if PROVIDENTIA_RELEASE_VERSION='../invalid' \
   bash "${ROOT}/packaging/linux/build-packages.sh" "${FIXTURE_ROOT}/missing" \
