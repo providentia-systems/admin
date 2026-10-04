@@ -21,7 +21,7 @@ install_linux_packages() {
   local packages=(
     ca-certificates clang cmake coreutils curl dbus-x11 desktop-file-utils
     dpkg-dev git gnupg gzip jq libegl1 libgles2 libgtk-3-0 libgtk-3-dev liblzma-dev
-    libsecret-1-0 libsecret-1-dev ninja-build pkg-config ripgrep unzip xvfb
+    libsecret-1-0 libsecret-1-dev ninja-build pkg-config ripgrep unzip xdg-user-dirs xvfb
     xz-utils zip
   )
   if ! command -v apt-get >/dev/null 2>&1; then
@@ -89,7 +89,7 @@ install_flutter() {
   local extract
   extract="$(mktemp -d "${TOOL_CACHE}/flutter-extract.XXXXXX")"
   # Cloud workspaces commonly reject the numeric uid/gid stored in Flutter's
-  # release archive.  Extract as the current agent user so bootstrap remains
+  # release archive. Extract as the current agent user so bootstrap remains
   # portable across restricted containers and ordinary developer machines.
   tar --extract --xz --no-same-owner --file "${archive}" --directory "${extract}"
   if ! flutter_is_healthy "${extract}/flutter"; then
@@ -113,7 +113,7 @@ install_flutter() {
 }
 
 if [ "${1:-}" = "--check" ]; then
-  for command in curl git gzip sha256sum tar timeout xz; do
+  for command in curl git gzip sha256sum tar timeout xdg-user-dir xz; do
     command -v "${command}" >/dev/null || {
       echo "Missing required command: ${command}" >&2
       exit 1
