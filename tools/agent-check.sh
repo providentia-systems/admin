@@ -17,6 +17,7 @@ mkdir -p "${ANALYZER_STATE_LOCATION_OVERRIDE}"
 
 bash tool/materialize_contract.sh
 bash tools/verify-structure.sh
+node --test tool/*.test.mjs
 flutter pub get --enforce-lockfile
 dart format --output=none --set-exit-if-changed lib test
 flutter analyze --fatal-infos --fatal-warnings
