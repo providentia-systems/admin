@@ -48,7 +48,7 @@ PACKAGE="$(realpath "$1")"
 }
 
 DEPENDENCIES=",$(dpkg-deb --field "${PACKAGE}" Depends | tr -d ' '),"
-for dependency in libegl1 libgles2 libgtk-3-0 libsecret-1-0; do
+for dependency in libegl1 libgles2 libgtk-3-0 libsecret-1-0 xdg-user-dirs; do
   [[ "${DEPENDENCIES}" == *",${dependency},"* ]] || {
     echo "Debian package is missing runtime dependency: ${dependency}" >&2
     exit 65
@@ -103,22 +103,33 @@ while IFS= read -r -d '' native_library; do
 done < <(find "${LIBRARY_ROOT}" -type f -name '*.so' -print0)
 
 if [[ "${PROVIDENTIA_LINUX_LAUNCH_SMOKE:-false}" == true ]]; then
-  command -v xvfb-run >/dev/null || {
-    echo 'xvfb-run is required for the Linux launch smoke.' >&2
-    exit 69
-  }
+  for command in xvfb-run xwininfo xdg-user-dir; do
+    command -v "${command}" >/dev/null || {
+      echo "Missing Linux launch verification command: ${command}" >&2
+      exit 69
+    }
+  done
   LAUNCH_BINARY="${PROVIDENTIA_LINUX_INSTALLED_BINARY:-${BINARY}}"
   [[ -x "${LAUNCH_BINARY}" ]] || {
     echo "Linux launch target is not executable: ${LAUNCH_BINARY}" >&2
     exit 66
   }
+  TOOL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  LAUNCH_HOME="${EXTRACTION_ROOT}/launch-home"
+  mkdir -p "${LAUNCH_HOME}/config" "${LAUNCH_HOME}/cache" "${LAUNCH_HOME}/data"
+  chmod 700 "${LAUNCH_HOME}" "${LAUNCH_HOME}/config" "${LAUNCH_HOME}/cache" "${LAUNCH_HOME}/data"
+  LAUNCH_LOG="${EXTRACTION_ROOT}/launch.log"
   set +e
-  dbus-run-session -- timeout --signal=TERM --kill-after=5s 15s \
-    xvfb-run -a "${LAUNCH_BINARY}"
+  HOME="${LAUNCH_HOME}" XDG_CONFIG_HOME="${LAUNCH_HOME}/config" \
+    XDG_CACHE_HOME="${LAUNCH_HOME}/cache" XDG_DATA_HOME="${LAUNCH_HOME}/data" \
+    dbus-run-session -- timeout --signal=TERM --kill-after=5s 25s \
+    xvfb-run -a bash "${TOOL_ROOT}/verify_first_frame.sh" \
+      "${LAUNCH_BINARY}" 'Providentia Admin' "${LAUNCH_LOG}"
   LAUNCH_STATUS=$?
   set -e
-  [[ "${LAUNCH_STATUS}" -eq 124 ]] || {
-    echo "Providentia Admin exited before the 15-second launch smoke completed (status ${LAUNCH_STATUS})." >&2
+  [[ "${LAUNCH_STATUS}" -eq 0 ]] || {
+    echo "Providentia Admin failed first-frame verification (status ${LAUNCH_STATUS})." >&2
+    [[ ! -f "${LAUNCH_LOG}" ]] || tail -n 60 "${LAUNCH_LOG}" >&2
     exit 70
   }
 fi
