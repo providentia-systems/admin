@@ -202,6 +202,67 @@ void main() {
     expect(chosen?.id, productId);
   });
 
+  testWidgets('product pages and new searches start at the first result', (
+    tester,
+  ) async {
+    final api = FakeApi((request) async {
+      final offset = int.parse(request.query!['offset']!);
+      return jsonResponse({
+        'data': [
+          for (var index = offset; index < offset + 50; index++)
+            {
+              ...productSummary,
+              'id':
+                  '0198f4e1-7abc-7def-8abc-${index.toString().padLeft(12, '0')}',
+              'canonicalName': 'Product ${index.toString().padLeft(3, '0')}',
+            },
+        ],
+        'pagination': {'limit': 50, 'offset': offset},
+      });
+    });
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PublishedProductPickerDialog(
+          operations: CatalogOperationsRepository(api),
+          title: 'Select product',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final list = find.byType(ListView);
+    Future<void> scrollDown() async {
+      await tester.drag(list, const Offset(0, -2500));
+      await tester.pumpAndSettle();
+      expect(tester.widget<ListView>(list).controller!.offset, greaterThan(0));
+    }
+
+    await scrollDown();
+    await tester.tap(find.byTooltip('Next product page'));
+    await tester.pumpAndSettle();
+    expect(api.requests.last.query!['offset'], '50');
+    expect(find.text('Product 050'), findsOneWidget);
+    expect(tester.widget<ListView>(list).controller!.offset, 0);
+    await scrollDown();
+    await tester.tap(find.byTooltip('Previous product page'));
+    await tester.pumpAndSettle();
+    expect(find.text('Product 000'), findsOneWidget);
+    expect(tester.widget<ListView>(list).controller!.offset, 0);
+    await scrollDown();
+    await tester.enterText(
+      find.byKey(const Key('product-search-query')),
+      'rice',
+    );
+    await tester.tap(find.byKey(const Key('product-search-submit')));
+    await tester.pumpAndSettle();
+    expect(api.requests.last.query!['q'], 'rice');
+    expect(api.requests.last.query!['offset'], '0');
+    expect(find.text('Product 000'), findsOneWidget);
+    expect(tester.widget<ListView>(list).controller!.offset, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   group('CatalogOperationsRepository governance', () {
     test('keeps an existing conflict with reason and revision', () async {
       final conflict = CatalogConflict.fromJson(<String, Object?>{

@@ -59,6 +59,28 @@ const catalogNullableFields = {'variantId', 'unitId', 'amount', 'packId'};
 final class CatalogMaintenanceRepository {
   const CatalogMaintenanceRepository(this.api);
   final AdminApi api;
+
+  /// Loads the current editable identity rather than reconstructing fields
+  /// from the public pack summary, which omits unit and variant references.
+  Future<CatalogEntity> productPack(String productId, String packId) async {
+    if (!isUuid(productId) || !isUuid(packId)) {
+      throw const FormatException('Invalid pack identity.');
+    }
+    for (var offset = 0; offset < 10000; offset += 100) {
+      final rows = await list('pack', productId: productId, offset: offset);
+      for (final row in rows) {
+        if (row.fields['productId'] != productId) {
+          throw const FormatException('Pack belongs to another product.');
+        }
+        if (row.id == packId) return row;
+      }
+      if (rows.length < 100) break;
+    }
+    throw const FormatException(
+      'Pack is no longer available for this product.',
+    );
+  }
+
   Future<List<CatalogEntity>> list(
     String type, {
     int offset = 0,

@@ -131,6 +131,73 @@ void main() {
   );
 
   testWidgets(
+    'maintenance pagination resets scroll but entity contexts survive',
+    (tester) async {
+      final api = FakeApi((request) async {
+        final offset = int.parse(request.query!['offset']!);
+        return jsonResponse({
+          'data': [
+            for (var index = offset; index < offset + 100; index++)
+              {
+                'id':
+                    '0198f4e1-7abc-7def-8abc-${index.toString().padLeft(12, '0')}',
+                'type': request.path.split('/').last,
+                'status': 'published',
+                'revision': 1,
+                'fields': {
+                  'canonicalName': 'Record $index',
+                  if (request.path.endsWith('/product')) ...{
+                    'brand': '',
+                    'categoryId': '0198f4e1-7abc-7def-8abc-000000000000',
+                  },
+                },
+              },
+          ],
+        });
+      });
+      await _pump(tester, api);
+      final list = find.byType(ListView);
+      Future<void> scrollDown() async {
+        await tester.drag(list, const Offset(0, -2000));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ListView>(list).controller!.offset,
+          greaterThan(0),
+        );
+      }
+
+      await scrollDown();
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+      expect(api.requests.last.query!['offset'], '100');
+      expect(tester.widget<ListView>(list).controller!.offset, 0);
+      expect(find.text('Record 100').hitTestable(), findsOneWidget);
+      await scrollDown();
+      final categoryScroll = tester.widget<ListView>(list).controller!.offset;
+      await tester.tap(find.text('Products'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<ListView>(list).controller!.offset, 0);
+      await tester.tap(find.text('Categories'));
+      await tester.pumpAndSettle();
+      expect(api.requests.last.query!['offset'], '100');
+      expect(tester.widget<ListView>(list).controller!.offset, categoryScroll);
+      await tester.tap(find.text('Previous'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<ListView>(list).controller!.offset, 0);
+      expect(find.text('Record 0').hitTestable(), findsOneWidget);
+      await scrollDown();
+      final search = find.byKey(const Key('catalog-entity-search'));
+      await tester.enterText(search, 'Rice');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(api.requests.last.query!['offset'], '0');
+      expect(api.requests.last.query!['q'], 'Rice');
+      expect(tester.widget<ListView>(list).controller!.offset, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'category create, edit, archive and restore use current revisions',
     (tester) async {
       Map<String, Object?>? entity;

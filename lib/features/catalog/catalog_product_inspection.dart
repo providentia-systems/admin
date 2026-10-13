@@ -7,10 +7,14 @@ class CatalogProductInspection extends StatelessWidget {
   const CatalogProductInspection({
     required this.product,
     required this.onManage,
+    this.onAddPack,
+    this.onEditPack,
     super.key,
   });
   final CatalogProductDetail product;
   final VoidCallback onManage;
+  final VoidCallback? onAddPack;
+  final ValueChanged<CatalogPackSummary>? onEditPack;
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
@@ -38,9 +42,24 @@ class CatalogProductInspection extends StatelessWidget {
           'Published packs (${product.packs.length})',
           style: Theme.of(context).textTheme.titleMedium,
         ),
+        if (onAddPack != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.tonalIcon(
+              key: const Key('add-canonical-pack'),
+              onPressed: onAddPack,
+              icon: const Icon(Icons.add),
+              label: const Text('Add pack size'),
+            ),
+          ),
+          const Text(
+            'Keep one product with separate pack options, such as 1 kg and 4 kg.',
+          ),
+        ],
         if (product.packs.isEmpty)
           const Text(
-            'No selectable published pack. Review this product in the master.',
+            'No selectable published pack. Add a pack size to this product.',
           ),
         for (final pack in product.packs)
           Card(
@@ -61,6 +80,13 @@ class CatalogProductInspection extends StatelessWidget {
                   Text(
                     'Normalized base amount: ${pack.normalizedBaseAmount ?? 'Unspecified'}',
                   ),
+                  if (onEditPack != null)
+                    TextButton.icon(
+                      key: Key('edit-canonical-pack-${pack.id}'),
+                      onPressed: () => onEditPack!(pack),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit pack size'),
+                    ),
                 ],
               ),
             ),

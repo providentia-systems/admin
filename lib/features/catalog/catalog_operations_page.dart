@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/session_controller.dart';
 import 'catalog_maintenance_page.dart';
+import 'catalog_maintenance_repository.dart';
 import 'catalog_models.dart';
 import 'catalog_operations_models.dart';
 import 'catalog_operations_repository.dart';
@@ -166,6 +167,10 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
                     child: CatalogProductInspection(
                       product: product,
                       onManage: () => _manageProduct(product),
+                      onAddPack: _loading ? null : () => _managePack(product),
+                      onEditPack: _loading
+                          ? null
+                          : (pack) => _managePack(product, packId: pack.id),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -500,6 +505,7 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
   }
 
   Future<void> _manageProduct(CatalogProductDetail product) async {
+    if (_loading || !widget.canCurate) return;
     final epoch = widget.session.authorizationEpoch;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -511,6 +517,45 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
         ),
       ),
     );
+    await _refreshSelectedProduct(product, epoch);
+  }
+
+  Future<void> _managePack(
+    CatalogProductDetail product, {
+    String? packId,
+  }) async {
+    if (_loading || !widget.canCurate) return;
+    final epoch = widget.session.authorizationEpoch;
+    final repository = CatalogMaintenanceRepository(widget.api);
+    _begin();
+    try {
+      CatalogEntity? entity;
+      if (packId != null) {
+        entity = await repository.productPack(product.id, packId);
+      }
+      if (!_authorized(epoch)) return;
+      await showCatalogEntityEditor(
+        context: context,
+        repository: repository,
+        session: widget.session,
+        type: 'pack',
+        productId: product.id,
+        entity: entity,
+      );
+      await _refreshSelectedProduct(product, epoch);
+    } on Object {
+      if (_authorized(epoch)) {
+        _fail('The pack could not be loaded safely. Reload and try again.');
+      }
+    } finally {
+      if (_authorized(epoch)) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _refreshSelectedProduct(
+    CatalogProductDetail product,
+    int epoch,
+  ) async {
     if (!_authorized(epoch)) return;
     try {
       final refreshed = await _operations.product(product.id);
@@ -787,12 +832,25 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
   void _reloadSection() {
     switch (_section) {
       case CatalogOperationsSection.identities:
-        setState(() => _safeMessage = null);
+        final product = _selectedProduct;
+        if (product == null) {
+          setState(() => _safeMessage = null);
+        } else {
+          unawaited(_reloadIdentity(product));
+        }
       case CatalogOperationsSection.conflicts:
         unawaited(_loadConflicts());
       case CatalogOperationsSection.merges:
         unawaited(_loadMergeEvents());
     }
+  }
+
+  Future<void> _reloadIdentity(CatalogProductDetail product) async {
+    if (_loading) return;
+    final epoch = widget.session.authorizationEpoch;
+    _begin();
+    await _refreshSelectedProduct(product, epoch);
+    if (_authorized(epoch)) setState(() => _loading = false);
   }
 
   void _begin() => setState(() {
