@@ -533,7 +533,8 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
       if (packId != null) {
         entity = await repository.productPack(product.id, packId);
       }
-      if (!_authorized(epoch)) return;
+      if (!mounted || !_authorized(epoch)) return;
+      setState(() => _loading = false);
       await showCatalogEntityEditor(
         context: context,
         repository: repository,
@@ -542,6 +543,8 @@ class _CatalogOperationsPageState extends State<CatalogOperationsPage> {
         productId: product.id,
         entity: entity,
       );
+      if (!_authorized(epoch)) return;
+      _begin();
       await _refreshSelectedProduct(product, epoch);
     } on Object {
       if (_authorized(epoch)) {

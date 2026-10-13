@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expectedDigest =
-  'ef5714a6298326d6fb449b966117e8b61c74de67d1bfc274ad8ec431aecd802d';
+  'b6b7f8b5aed3c79c8cb751b21ab1c9dc21786124bb56ab08d21955ace8d7bd36';
 const contractBytes = await readFile(
   path.join(root, 'contracts', 'providentia-v1.json'),
 );
@@ -43,7 +43,7 @@ const digest = createHash('sha256').update(contractBytes).digest('hex');
 assert(digest === expectedDigest, 'OpenAPI digest drifted from backend 2.2.0.');
 assert(contract.openapi === '3.1.0', 'OpenAPI version must be 3.1.0.');
 assert(contract.info?.version === '2.2.0', 'API version must be 2.2.0.');
-assert(Object.keys(contract.paths ?? {}).length === 194, 'Expected 194 API paths.');
+assert(Object.keys(contract.paths ?? {}).length === 195, 'Expected 195 API paths.');
 
 let operationCount = 0;
 const operationIds = new Set();
@@ -55,7 +55,7 @@ for (const value of Object.values(contract.paths ?? {})) {
     }
   }
 }
-assert(operationCount === 235, 'Expected 235 API operations.');
+assert(operationCount === 236, 'Expected 236 API operations.');
 assert(
   lock.artifacts?.['providentia-v1.json']?.sha256 === expectedDigest,
   'Backend contract lock digest does not match.',
@@ -72,7 +72,7 @@ assert(lock.apiVersion === '2.2.0', 'Contract lock API version drifted.');
 assert(lock.version === '2.2.0', 'Contract lock publication version drifted.');
 assert(lock.sha256 === expectedDigest, 'Contract lock publication digest drifted.');
 assert(manifest.contractVersion === '2.2.0', 'Generated manifest API version drifted.');
-assert(Object.keys(contract.components?.schemas ?? {}).length === 285, 'Expected 285 schemas.');
+assert(Object.keys(contract.components?.schemas ?? {}).length === 287, 'Expected 287 schemas.');
 const allowedOperations = new Set(manifest.allowedOperationIds);
 assert(allowedOperations.size === 92, 'Admin allowlist contains duplicate or missing operations.');
 for (const operationId of allowedOperations) {
