@@ -4,6 +4,66 @@ import '../support/fake_api.dart';
 
 const _id = '0198f4e1-7abc-7def-8abc-0123456789ab';
 void main() {
+  Map<String, Object?> pack(String id, {String productId = _id}) => {
+    'id': id,
+    'type': 'pack',
+    'status': 'published',
+    'revision': 5,
+    'fields': {
+      'productId': productId,
+      'variantId': null,
+      'unitId': null,
+      'originalPackText': '1 kg',
+      'amount': '1',
+      'multiplicity': '1',
+    },
+  };
+
+  test(
+    'direct pack editing finds current identity beyond the first page',
+    () async {
+      const targetId = '0198f4e2-7abc-7def-8abc-0123456789ab';
+      final api = FakeApi((request) async {
+        expect(request.path, '/api/v1/catalog-admin/entities/pack');
+        expect(request.query!['productId'], _id);
+        return jsonResponse({
+          'data': request.query!['offset'] == '0'
+              ? [
+                  for (var index = 0; index < 100; index++)
+                    pack(
+                      '0198f4e1-7abc-7def-8abc-${index.toString().padLeft(12, '0')}',
+                    ),
+                ]
+              : [pack(targetId)],
+        });
+      });
+      final entity = await CatalogMaintenanceRepository(
+        api,
+      ).productPack(_id, targetId);
+      expect(entity.id, targetId);
+      expect(entity.revision, 5);
+      expect(api.requests.map((request) => request.query!['offset']), [
+        '0',
+        '100',
+      ]);
+    },
+  );
+
+  test('missing or cross-product pack cannot enter the editor', () async {
+    const targetId = '0198f4e2-7abc-7def-8abc-0123456789ab';
+    for (final rows in [
+      <Object?>[],
+      [pack(targetId, productId: targetId)],
+    ]) {
+      final api = FakeApi((_) async => jsonResponse({'data': rows}));
+      await expectLater(
+        CatalogMaintenanceRepository(api).productPack(_id, targetId),
+        throwsFormatException,
+      );
+      expect(api.requests, hasLength(1));
+    }
+  });
+
   test('edits preserve the entity revision and audit reason', () async {
     final api = FakeApi(
       (request) async => jsonResponse({

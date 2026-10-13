@@ -50,6 +50,32 @@ void main() {
       expect(opened, isTrue);
     },
   );
+  testWidgets('pack controls identify the selected published pack', (
+    tester,
+  ) async {
+    var added = false;
+    CatalogPackSummary? edited;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CatalogProductInspection(
+            product: CatalogProductDetail.fromJson(_detail()),
+            onManage: () {},
+            onAddPack: () => added = true,
+            onEditPack: (pack) => edited = pack,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('add-canonical-pack')));
+    expect(added, isTrue);
+    final edit = find.byKey(const Key('edit-canonical-pack-$_id'));
+    await tester.ensureVisible(edit);
+    await tester.tap(edit);
+    expect(edited?.id, _id);
+    expect(edited?.revision, 4);
+    expect(tester.takeException(), isNull);
+  });
   test('malformed nested pack fails closed instead of being discarded', () {
     final detail = _detail();
     ((detail['packs']! as List<Object?>).single!

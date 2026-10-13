@@ -6,6 +6,26 @@ import '../../core/security/secure_id.dart';
 import 'catalog_maintenance_repository.dart';
 import 'catalog_reason_field.dart';
 
+/// Reuses the maintenance editor's revision, audit and unsaved-change guards.
+Future<void> showCatalogEntityEditor({
+  required BuildContext context,
+  required CatalogMaintenanceRepository repository,
+  required SessionController session,
+  required String type,
+  String? productId,
+  CatalogEntity? entity,
+}) => showDialog<void>(
+  context: context,
+  barrierDismissible: false,
+  builder: (_) => _CatalogEntityEditor(
+    repository: repository,
+    session: session,
+    type: type,
+    productId: productId,
+    entity: entity,
+  ),
+);
+
 class CatalogMaintenancePage extends StatefulWidget {
   const CatalogMaintenancePage({
     required this.api,
@@ -62,9 +82,11 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
       mounted &&
       widget.session.phase == SessionPhase.authenticated &&
       widget.session.authorizationEpoch == epoch;
-  Future<void> _load() async {
+  Future<void> _load({double? scrollOffset}) async {
     final epoch = widget.session.authorizationEpoch;
     final request = ++_request;
+    final restoreOffset =
+        scrollOffset ?? (_scroll.hasClients ? _scroll.offset : 0.0);
     setState(() {
       _busy = true;
       _error = null;
@@ -82,6 +104,13 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
         _rows = rows;
         _busy = false;
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_authorized(epoch) && request == _request && _scroll.hasClients) {
+          _scroll.jumpTo(
+            restoreOffset.clamp(0.0, _scroll.position.maxScrollExtent),
+          );
+        }
+      });
     } catch (_) {
       if (!_authorized(epoch) || request != _request) return;
       setState(() {
@@ -94,16 +123,13 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
   Future<void> _edit([CatalogEntity? entity]) async {
     if (!widget.canCurate || _busy) return;
     final epoch = widget.session.authorizationEpoch;
-    await showDialog<void>(
+    await showCatalogEntityEditor(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => _CatalogEntityEditor(
-        repository: _repository,
-        session: widget.session,
-        type: _type,
-        productId: widget.productId,
-        entity: entity,
-      ),
+      repository: _repository,
+      session: widget.session,
+      type: _type,
+      productId: widget.productId,
+      entity: entity,
     );
     if (_authorized(epoch)) await _load();
   }
@@ -121,15 +147,13 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
       _query.text = previous?.query ?? '';
       _offset = previous?.offset ?? 0;
     });
-    unawaited(
-      _load().then((_) {
-        if (mounted && _scroll.hasClients) {
-          _scroll.jumpTo(
-            (previous?.scroll ?? 0).clamp(0, _scroll.position.maxScrollExtent),
-          );
-        }
-      }),
-    );
+    unawaited(_load(scrollOffset: previous?.scroll ?? 0));
+  }
+
+  void _changePage(int offset) {
+    if (_busy) return;
+    setState(() => _offset = offset);
+    unawaited(_load(scrollOffset: 0));
   }
 
   void _search() {
@@ -139,8 +163,7 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
       return;
     }
     setState(() => _offset = 0);
-    if (_scroll.hasClients) _scroll.jumpTo(0);
-    unawaited(_load());
+    unawaited(_load(scrollOffset: 0));
   }
 
   @override
@@ -269,20 +292,14 @@ class _CatalogMaintenancePageState extends State<CatalogMaintenancePage> {
               TextButton(
                 onPressed: _busy || _offset == 0
                     ? null
-                    : () {
-                        _offset -= 100;
-                        unawaited(_load());
-                      },
+                    : () => _changePage(_offset - 100),
                 child: const Text('Previous'),
               ),
               Text('Page ${_offset ~/ 100 + 1}'),
               TextButton(
                 onPressed: _busy || _rows.length < 100
                     ? null
-                    : () {
-                        _offset += 100;
-                        unawaited(_load());
-                      },
+                    : () => _changePage(_offset + 100),
                 child: const Text('Next'),
               ),
             ],
@@ -541,6 +558,11 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
                             isExpanded: true,
                             decoration: InputDecoration(
                               labelText: _label(entry.key),
+                              helperText:
+                                  entry.key == 'productId' &&
+                                      widget.productId != null
+                                  ? 'Belongs to the selected product.'
+                                  : null,
                             ),
                             items: [
                               const DropdownMenuItem(
@@ -558,7 +580,10 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
                                   ),
                                 ),
                             ],
-                            onChanged: _busy
+                            onChanged:
+                                _busy ||
+                                    (entry.key == 'productId' &&
+                                        widget.productId != null)
                                 ? null
                                 : (value) => entry.value.text = value ?? '',
                           )
@@ -572,6 +597,17 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
                                 : 1,
                             decoration: InputDecoration(
                               labelText: _label(entry.key),
+                              helperText: widget.type == 'pack'
+                                  ? switch (entry.key) {
+                                      'originalPackText' =>
+                                        'For example, 4 × 1 kg or 1 × 4 kg.',
+                                      'amount' =>
+                                        'Size of each unit in the selected measurement.',
+                                      'multiplicity' =>
+                                        '4 × 1 kg uses amount 1 and units per pack 4.',
+                                      _ => null,
+                                    }
+                                  : null,
                             ),
                           ),
                   ),
@@ -604,8 +640,22 @@ class _CatalogEntityEditorState extends State<_CatalogEntityEditor> {
       ],
     ),
   );
-  String _label(String field) => field.replaceAllMapped(
-    RegExp('[A-Z]'),
-    (match) => ' ${match[0]!.toLowerCase()}',
-  );
+  String _label(String field) {
+    if (widget.type == 'pack') {
+      switch (field) {
+        case 'originalPackText':
+          return 'Pack description';
+        case 'amount':
+          return 'Amount per unit';
+        case 'multiplicity':
+          return 'Units per pack';
+        case 'unitId':
+          return 'Measurement unit';
+      }
+    }
+    return field.replaceAllMapped(
+      RegExp('[A-Z]'),
+      (match) => ' ${match[0]!.toLowerCase()}',
+    );
+  }
 }

@@ -33,6 +33,7 @@ final class PublishedProductPickerDialog extends StatefulWidget {
 class _PublishedProductPickerDialogState
     extends State<PublishedProductPickerDialog> {
   final _query = TextEditingController();
+  final _scroll = ScrollController();
   PublishedProductPage? _page;
   CatalogProductDetail? _selected;
   var _loading = true;
@@ -50,6 +51,7 @@ class _PublishedProductPickerDialogState
   void dispose() {
     _generation += 1;
     _query.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -142,6 +144,7 @@ class _PublishedProductPickerDialogState
                     child: _page == null || _page!.data.isEmpty
                         ? const Center(child: Text('No products found.'))
                         : ListView.separated(
+                            controller: _scroll,
                             itemCount: _page!.data.length,
                             separatorBuilder: (_, _) =>
                                 const Divider(height: 1),
@@ -226,6 +229,7 @@ class _PublishedProductPickerDialogState
   );
 
   Future<void> _search() async {
+    if (_scroll.hasClients) _scroll.jumpTo(0);
     final generation = ++_generation;
     setState(() {
       _loading = true;

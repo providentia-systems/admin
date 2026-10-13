@@ -57,6 +57,25 @@ Manage product, packs and identities opens the existing revision-bound maintenan
 surface scoped to that product, including related aliases and barcodes. Existing
 conflict and reversible-merge workbenches remain authoritative.
 
+The selected canonical product also offers **Add pack size** and **Edit pack size**
+directly beside its published packs. These open the same guarded maintenance
+editor, keep the selected product fixed, and reload its published detail after
+closing. Editing first loads the current complete pack identity, including its
+unit, variant and revision; the public summary is never used to reconstruct an
+editable record. An audit reason, conflict reload and unsaved-change confirmation
+remain required. Used measurement meanings still cannot be changed by the UI.
+
+Keep one product with selectable pack options. For **4 × 1 kg**, select kilograms,
+enter amount per unit **1** and units per pack **4**. For **1 × 4 kg**, use amount
+**4** and units per pack **1**. The description retains the packaging distinction;
+normalization continues to use the existing backend unit and multiplicity rules.
+No quantities, receipt lines or price history are edited by catalog maintenance.
+
+Published product search and catalog maintenance reset to the first result when
+changing pages or submitting a new search. Switching maintenance entity types
+retains each type's search, page and scroll position; refresh and closing an editor
+restore the current list context after layout.
+
 Household category overrides do not rename or reclassify the global product.
 The stock display/filter honors the home category while the public item-master
 cache retains canonical labels. Used pack/unit measurements and published pack
