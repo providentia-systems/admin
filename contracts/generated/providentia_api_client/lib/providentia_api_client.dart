@@ -1,6 +1,6 @@
 // GENERATED FILE - DO NOT EDIT.
 // Source: contracts/providentia-v1.json
-// Contract SHA-256: ef5714a6298326d6fb449b966117e8b61c74de67d1bfc274ad8ec431aecd802d
+// Contract SHA-256: b6b7f8b5aed3c79c8cb751b21ab1c9dc21786124bb56ab08d21955ace8d7bd36
 // Home records use explicitly authorized operator endpoints; tenant mutation routes are excluded.
 
 library;
