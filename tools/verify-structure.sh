@@ -41,7 +41,7 @@ bash -n tools/agent-setup.sh tools/providentia-admin.sh \
   packaging/linux/build-packages.sh packaging/linux/AppRun \
   packaging/linux/providentia_admin packaging/linux/debian-postinst \
   packaging/linux/debian-postrm
-node --test tool/providentia_admin_setup.test.mjs
+node --test tool/providentia_admin_setup.test.mjs tool/artifact_action_pins.test.mjs
 
 test -f docs/index.md
 test -f docs/setup-ubuntu.md
@@ -68,7 +68,7 @@ if grep -Fq 'jni' linux/flutter/generated_plugins.cmake; then
   echo 'Linux-only Admin generated plugins must not contain JNI.' >&2
   exit 1
 fi
-grep -Fq "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" \
+node tool/verify_artifact_action_pins.mjs \
   .github/workflows/quality.yml .github/workflows/release-linux.yml
 grep -Fq 'environment: production-release' .github/workflows/release-linux.yml
 grep -Fq 'PRODUCTION_API_BASE_URL' .github/workflows/release-linux.yml
