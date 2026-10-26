@@ -13,6 +13,7 @@ import '../support/memory_credential_store.dart';
 const _home = '60000000-0000-4000-8000-000000000001';
 const _product = '60000000-0000-4000-8000-000000000002';
 const _category = '60000000-0000-4000-8000-000000000003';
+const _global = '60000000-0000-4000-8000-000000000004';
 
 Future<SessionController> _session() async {
   final store = MemoryCredentialStore(installationId: memoryInstallationId)
@@ -62,6 +63,58 @@ Future<void> _harness(WidgetTester tester, Widget Function() editor) async {
   await tester.tap(find.text('Open editor'));
   await tester.pumpAndSettle();
 }
+
+OperatorInventoryRecord _linkedRecord({
+  String name = '',
+  String? packText,
+  String? homeCategoryId,
+  String? globalCategoryId,
+  String categoryName = 'Staples',
+}) => OperatorInventoryRecord(
+  id: _product,
+  kind: OperatorInventoryKind.product,
+  revision: 2,
+  status: 'active',
+  name: name,
+  productId: _product,
+  packText: packText,
+  homeCategoryId: homeCategoryId,
+  globalCategoryId: globalCategoryId,
+  categoryName: categoryName,
+  resolvedName: 'Flour',
+  resolvedPackText: '1 kg',
+  unit: 'units',
+);
+
+FakeApi _inventoryApi({
+  String localStatus = 'active',
+  bool includeGlobal = true,
+  bool rejectUnit = false,
+}) => FakeApi((request) async {
+  if (request.method != 'GET') {
+    if (rejectUnit) {
+      throw const ApiException(
+        statusCode: 409,
+        message:
+            'The stock unit has history. Use a separate product to preserve quantities.',
+      );
+    }
+    return jsonResponse({'revision': 3});
+  }
+  if (request.path == '/api/v1/catalog/categories') {
+    return jsonResponse({
+      'data': [
+        if (includeGlobal)
+          {'id': _global, 'canonicalName': 'Staples', 'revision': 1},
+      ],
+    });
+  }
+  return jsonResponse({
+    'data': [
+      {'id': _category, 'name': 'Pantry', 'status': localStatus, 'revision': 1},
+    ],
+  });
+});
 
 void main() {
   testWidgets(
@@ -128,25 +181,10 @@ void main() {
   );
 
   testWidgets(
-    'catalog household metadata keeps global identity out of the mutation',
+    'catalog household overrides keep catalog identity out of the mutation',
     (tester) async {
       final session = await _session();
-      final api = FakeApi(
-        (request) async => jsonResponse(
-          request.method == 'GET'
-              ? {
-                  'data': [
-                    {
-                      'id': _category,
-                      'name': 'Pantry',
-                      'status': 'active',
-                      'revision': 1,
-                    },
-                  ],
-                }
-              : {'revision': 3},
-        ),
-      );
+      final api = _inventoryApi();
       await _harness(
         tester,
         () => OperatorInventoryEditor(
@@ -154,23 +192,17 @@ void main() {
           session: session,
           homeId: _home,
           kind: OperatorInventoryKind.product,
-          record: const OperatorInventoryRecord(
-            id: _product,
-            kind: OperatorInventoryKind.product,
-            revision: 2,
-            status: 'active',
-            name: '',
-            productId: _product,
-            homeCategoryId: _category,
-          ),
+          record: _linkedRecord(homeCategoryId: _category),
         ),
       );
-      expect(_field('Name'), findsNothing);
-      expect(_field('Pack or measure'), findsNothing);
+      expect(_field('Household name override'), findsOneWidget);
+      expect(_field('Household pack override'), findsOneWidget);
       await tester.enterText(
-        _field('Audit reason'),
-        'Household category correction',
+        _field('Household name override'),
+        'Household flour',
       );
+      await tester.enterText(_field('Household pack override'), '2 x 1 kg');
+      await tester.enterText(_field('Audit reason'), 'Correct household label');
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       final write = api.requests.singleWhere(
@@ -178,10 +210,332 @@ void main() {
       );
       expect(write.body, {
         'expectedRevision': 2,
-        'reason': 'Household category correction',
-        'homeCategoryId': _category,
+        'reason': 'Correct household label',
+        'privateName': 'Household flour',
+        'originalPackText': '2 x 1 kg',
       });
       expect(write.path, '/api/v1/admin/homes/$_home/products/$_product');
+    },
+  );
+
+  testWidgets(
+    'private product creation includes the selected unit and global category',
+    (tester) async {
+      final session = await _session();
+      final api = _inventoryApi();
+      await _harness(
+        tester,
+        () => OperatorInventoryEditor(
+          repository: OperatorInventoryRepository(api),
+          session: session,
+          homeId: _home,
+          kind: OperatorInventoryKind.product,
+        ),
+      );
+      await tester.enterText(_field('Audit reason'), 'Create household flour');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a name.'), findsOneWidget);
+      await tester.enterText(_field('Name'), 'Private flour');
+      await tester.enterText(_field('Pack or measure'), 'Loose flour');
+      await tester.tap(find.byKey(const ValueKey('operator-category')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Global: Staples').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('operator-unit')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('kg').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      final write = api.requests.singleWhere(
+        (request) => request.method == 'POST',
+      );
+      final body = write.body! as Map<String, Object?>;
+      expect(body['id'], matches(RegExp(r'^[a-f0-9-]{36}$')));
+      expect({...body}..remove('id'), {
+        'expectedRevision': 0,
+        'reason': 'Create household flour',
+        'privateName': 'Private flour',
+        'originalPackText': 'Loose flour',
+        'homeCategoryId': null,
+        'globalCategoryId': _global,
+        'unit': 'kg',
+      });
+      expect(write.path, '/api/v1/admin/homes/$_home/products');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final scope in ['local', 'global', 'inherited']) {
+    testWidgets('unchanged $scope category preserves the effective result', (
+      tester,
+    ) async {
+      final session = await _session();
+      final api = _inventoryApi();
+      await _harness(
+        tester,
+        () => OperatorInventoryEditor(
+          repository: OperatorInventoryRepository(api),
+          session: session,
+          homeId: _home,
+          kind: OperatorInventoryKind.product,
+          record: _linkedRecord(
+            homeCategoryId: scope == 'local' ? _category : null,
+            globalCategoryId: scope == 'global' ? _global : null,
+            categoryName: scope == 'local' ? 'Pantry' : 'Staples',
+          ),
+        ),
+      );
+      expect(
+        find.text(
+          'Current effective category: ${scope == 'local' ? 'Pantry' : 'Staples'}',
+        ),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        _field('Audit reason'),
+        'Reviewed without changes',
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(api.requests.where((request) => request.method != 'GET'), isEmpty);
+      expect(find.byType(OperatorInventoryEditor), findsNothing);
+    });
+  }
+
+  for (final target in ['local', 'global', 'inherited']) {
+    testWidgets(
+      'changing category to $target writes both scope fields atomically',
+      (tester) async {
+        final session = await _session();
+        final api = _inventoryApi();
+        await _harness(
+          tester,
+          () => OperatorInventoryEditor(
+            repository: OperatorInventoryRepository(api),
+            session: session,
+            homeId: _home,
+            kind: OperatorInventoryKind.product,
+            record: _linkedRecord(
+              homeCategoryId: target == 'local' ? null : _category,
+              globalCategoryId: target == 'local' ? _global : null,
+            ),
+          ),
+        );
+        await tester.tap(find.byKey(const ValueKey('operator-category')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.text(switch (target) {
+            'local' => 'Local: Pantry',
+            'global' => 'Global: Staples',
+            _ => 'Use catalog category (inherited)',
+          }).last,
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          _field('Audit reason'),
+          'Correct category scope',
+        );
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+        expect(
+          api.requests.singleWhere((request) => request.method == 'PATCH').body,
+          {
+            'expectedRevision': 2,
+            'reason': 'Correct category scope',
+            'homeCategoryId': target == 'local' ? _category : null,
+            'globalCategoryId': target == 'global' ? _global : null,
+          },
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'clearing linked overrides sends null and keeps the category omitted',
+    (tester) async {
+      final session = await _session();
+      final api = _inventoryApi();
+      await _harness(
+        tester,
+        () => OperatorInventoryEditor(
+          repository: OperatorInventoryRepository(api),
+          session: session,
+          homeId: _home,
+          kind: OperatorInventoryKind.product,
+          record: _linkedRecord(
+            name: 'Household flour',
+            packText: '2 x 1 kg',
+            globalCategoryId: _global,
+          ),
+        ),
+      );
+      await tester.enterText(_field('Household name override'), '');
+      await tester.enterText(_field('Household pack override'), '');
+      await tester.enterText(_field('Audit reason'), 'Use catalog labels');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(
+        api.requests.singleWhere((request) => request.method == 'PATCH').body,
+        {
+          'expectedRevision': 2,
+          'reason': 'Use catalog labels',
+          'privateName': null,
+          'originalPackText': null,
+        },
+      );
+    },
+  );
+
+  testWidgets(
+    'archived local and unavailable global selections stay visible and unchanged',
+    (tester) async {
+      final session = await _session();
+      for (final local in [true, false]) {
+        final api = _inventoryApi(
+          localStatus: 'archived',
+          includeGlobal: false,
+        );
+        await _harness(
+          tester,
+          () => OperatorInventoryEditor(
+            repository: OperatorInventoryRepository(api),
+            session: session,
+            homeId: _home,
+            kind: OperatorInventoryKind.product,
+            record: _linkedRecord(
+              homeCategoryId: local ? _category : null,
+              globalCategoryId: local ? null : _global,
+              categoryName: 'Retained label',
+            ),
+          ),
+        );
+        expect(
+          find.text(
+            local
+                ? 'Local: Pantry (archived)'
+                : 'Global: Retained label (unavailable)',
+          ),
+          findsOneWidget,
+        );
+        await tester.enterText(
+          _field('Audit reason'),
+          'Leave unavailable selection unchanged',
+        );
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+        expect(
+          api.requests.where((request) => request.method != 'GET'),
+          isEmpty,
+        );
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  testWidgets(
+    'renaming a linked product preserves an unavailable global override',
+    (tester) async {
+      final session = await _session();
+      final api = _inventoryApi(includeGlobal: false);
+      await _harness(
+        tester,
+        () => OperatorInventoryEditor(
+          repository: OperatorInventoryRepository(api),
+          session: session,
+          homeId: _home,
+          kind: OperatorInventoryKind.product,
+          record: _linkedRecord(
+            globalCategoryId: _global,
+            categoryName: 'Archived staples',
+          ),
+        ),
+      );
+      await tester.enterText(_field('Household name override'), 'Local label');
+      await tester.enterText(
+        _field('Audit reason'),
+        'Correct household label only',
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(
+        api.requests.singleWhere((request) => request.method == 'PATCH').body,
+        {
+          'expectedRevision': 2,
+          'reason': 'Correct household label only',
+          'privateName': 'Local label',
+        },
+      );
+    },
+  );
+
+  testWidgets(
+    'stock-unit history rejection retains the editor and requires canonical reload',
+    (tester) async {
+      final session = await _session();
+      final api = _inventoryApi(rejectUnit: true);
+      await _harness(
+        tester,
+        () => OperatorInventoryEditor(
+          repository: OperatorInventoryRepository(api),
+          session: session,
+          homeId: _home,
+          kind: OperatorInventoryKind.product,
+          record: _linkedRecord(),
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('operator-unit')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('kg').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(_field('Audit reason'), 'Review unit');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(
+        api.requests.singleWhere((request) => request.method == 'PATCH').body,
+        {'expectedRevision': 2, 'reason': 'Review unit', 'unit': 'kg'},
+      );
+      expect(find.textContaining('stock unit has history'), findsOneWidget);
+      expect(
+        find.textContaining('Close and reload before retrying.'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save'))
+            .onPressed,
+        isNull,
+      );
+      expect(find.byType(OperatorInventoryEditor), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'product editor fits a narrow window and scrolls to the audit reason',
+    (tester) async {
+      final session = await _session();
+      final api = _inventoryApi();
+      await _harness(
+        tester,
+        () => OperatorInventoryEditor(
+          repository: OperatorInventoryRepository(api),
+          session: session,
+          homeId: _home,
+          kind: OperatorInventoryKind.product,
+          record: _linkedRecord(globalCategoryId: _global),
+        ),
+      );
+      await tester.binding.setSurfaceSize(const Size(360, 740));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(_field('Audit reason'));
+      await tester.enterText(_field('Audit reason'), 'Narrow window review');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.byType(OperatorInventoryEditor), findsNothing);
+      expect(tester.takeException(), isNull);
     },
   );
 

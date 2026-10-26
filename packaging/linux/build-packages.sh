@@ -21,6 +21,16 @@ find "${OUTPUT}" -mindepth 1 -maxdepth 1 -type f -delete
 WORK_ROOT="$(mktemp -d)"
 trap 'rm -rf -- "${WORK_ROOT}"' EXIT
 
+# Assemble one snapshot for all formats without modifying the Flutter build.
+SOURCE_BUNDLE="$(realpath "${BUNDLE}")"
+BUNDLE="${WORK_ROOT}/bundle"
+install -d "${BUNDLE}"
+cp -a "${SOURCE_BUNDLE}/." "${BUNDLE}/"
+# This build record leaves deployed migrations and authenticated acceptance
+# unverified; only the installation operator can record those results.
+PROVIDENTIA_RELEASE_VERSION="${VERSION}" \
+  node "${ROOT}/tool/write_release_provenance.mjs" "${BUNDLE}/release-provenance.json"
+
 tar --create --gzip --file "${OUTPUT}/providentia-admin-${VERSION}-linux-x86_64.tar.gz" \
   --directory "${BUNDLE}" .
 
@@ -70,5 +80,6 @@ fi
 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "${TOOL}" "${APPDIR}" \
   "${OUTPUT}/Providentia_Admin-${VERSION}-x86_64.AppImage"
 
+cp "${BUNDLE}/release-provenance.json" "${OUTPUT}/release-provenance.json"
 (cd "${OUTPUT}" && sha256sum -- * > SHA256SUMS)
 echo "Linux packages written to ${OUTPUT}."

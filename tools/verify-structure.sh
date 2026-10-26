@@ -15,6 +15,10 @@ test -f pubspec.yaml
 test -f pubspec.lock
 test -f contracts/source/providentia-v1.json.gz
 test -f contracts/contract.lock.json
+test -f contracts/backend-compatibility.json
+test -x tool/run_backend_compatibility.sh
+test -f tool/seed_admin_compatibility.php
+test -f test/integration/backend_compatibility_live_test.dart
 test -f contracts/generated/providentia_api_client/lib/providentia_api_client.dart
 test -f tools/agent-requirements.json
 test -f tools/agent-setup.sh
@@ -37,6 +41,7 @@ bash -n tools/agent-setup.sh tools/providentia-admin.sh \
   tool/verify_linux_deb.sh \
   tool/sign_linux_artifacts.sh \
   tool/materialize_contract.sh \
+  tool/run_backend_compatibility.sh \
   tools/agent-check.sh \
   packaging/linux/build-packages.sh packaging/linux/AppRun \
   packaging/linux/providentia_admin packaging/linux/debian-postinst \
@@ -110,7 +115,7 @@ if grep -En '^[[:space:]]+(camera|drift|drift_flutter|image_picker|sqlite3):' pu
   exit 1
 fi
 
-EXPECTED="75701b9ef65edc964f50762ba428ca425bfad40f574cb1abc0ce03086ca19cc1"
+EXPECTED="2b7b38490dc42ad967cfff7e32dd56db41d30842a7d39845b9beecb7f7d4e254"
 ACTUAL="$(sha256sum contracts/providentia-v1.json | cut -d' ' -f1)"
 test "${ACTUAL}" = "${EXPECTED}"
 

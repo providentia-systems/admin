@@ -1,3 +1,12 @@
 [extend]
 useDefault = true
 
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Canonical API 2.4 OpenAPI checksum is a public integrity digest, not a credential."
+condition = "AND"
+paths = ['''^contracts/backend-compatibility\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"openapiSha256":\s*"2b7b38490dc42ad967cfff7e32dd56db41d30842a7d39845b9beecb7f7d4e254",?\s*$''']

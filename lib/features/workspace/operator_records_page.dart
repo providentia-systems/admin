@@ -225,6 +225,9 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
   Widget build(BuildContext context) {
     final productRows =
         _home != null && _collection == 'products' && !widget.audit;
+    // Stock identity arrives with each backend balance row. A partial Products
+    // page cannot supply a safe or complete client-side metadata join.
+    final stockRows = _home != null && _collection == 'stock' && !widget.audit;
     final keys = <String>{
       if (productRows) ...const [
         'name',
@@ -234,8 +237,18 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
         'category_scope',
         'catalog_reference',
       ],
+      if (stockRows) ...const [
+        'name',
+        'pack_text',
+        'unit',
+        'quantity',
+        'uncertain',
+        'revision',
+        'catalog_reference',
+        'home_product_status',
+      ],
       for (final row in _rows) ...row.keys,
-    }.where((key) => key != 'home_id').toList();
+    }.where((key) => stockRows || key != 'home_id').toList();
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -410,6 +423,8 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
                             label: Text(
                               productRows
                                   ? _productLabel(key)
+                                  : stockRows
+                                  ? _stockLabel(key)
                                   : displayLabel(key),
                             ),
                           ),
@@ -456,6 +471,8 @@ class _OperatorRecordsPageState extends State<OperatorRecordsPage> {
                                         ? jsonEncode(row[key])
                                         : productRows
                                         ? _productValue(row, key)
+                                        : stockRows
+                                        ? _stockValue(row, key)
                                         : '${row[key] ?? ''}',
                                   ),
                                 ),
@@ -523,5 +540,51 @@ String _productValue(Record row, String key) {
     'private_name' ||
     'original_pack_text' => text(key) ?? 'No private override',
     _ => '${row[key] ?? ''}',
+  };
+}
+
+String _stockLabel(String key) => switch (key) {
+  'name' => 'Product',
+  'pack_text' => 'Pack',
+  'unit' => 'Stock unit',
+  'quantity' => 'Quantity',
+  'uncertain' => 'Evidence',
+  'revision' => 'Balance revision',
+  'catalog_reference' => 'Product reference',
+  'home_product_status' => 'Household product status',
+  'catalog_product_status' => 'Catalog product status',
+  'catalog_pack_status' => 'Catalog pack status',
+  'home_id' => 'Home ID',
+  'home_product_id' => 'Household product ID',
+  'last_movement_id' => 'Last movement ID',
+  'updated_at' => 'Updated at',
+  'category_name' => 'Category',
+  'category_scope' => 'Category scope',
+  'pending_quantity' => 'Unresolved quantity',
+  _ => displayLabel(key),
+};
+
+String _stockValue(Record row, String key) {
+  final value = row[key];
+  final present = value != null && '$value'.trim().isNotEmpty;
+  return switch (key) {
+    'name' => present ? '$value' : 'Unresolved product',
+    'pack_text' => present ? '$value' : 'Not specified',
+    'unit' ||
+    'home_product_status' ||
+    'catalog_product_status' ||
+    'catalog_pack_status' => present ? '$value' : 'Unavailable',
+    'catalog_reference' => present ? '$value' : 'Metadata unavailable',
+    'uncertain' => switch (value) {
+      true || 1 || '1' => 'Unresolved evidence',
+      false || 0 || '0' => 'No unresolved evidence',
+      _ => 'Unavailable',
+    },
+    // Quantities are backend decimal strings. Preserve the sign and every
+    // fractional digit; displaying a balance never converts its stock unit.
+    'quantity' ||
+    'pending_quantity' ||
+    'revision' => present ? '$value' : 'Unavailable',
+    _ => value == null ? '' : '$value',
   };
 }
