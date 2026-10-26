@@ -37,3 +37,12 @@ deployment, data recovery or installed authenticated acceptance. Those checks
 follow [`admin-release-acceptance.md`](../admin-release-acceptance.md), recording
 actual deployed revision, contract digest, origin and migration status while
 excluding credentials and household records.
+
+## Canonical API 2.4 pin
+
+The canonical artifact and lock now match backend commit
+`769518dc50e89004db1e1718417e8daad378618e`, API `2.4.0`, OpenAPI SHA-256
+`2b7b38490dc42ad967cfff7e32dd56db41d30842a7d39845b9beecb7f7d4e254`.
+The existing 92-operation Admin facade is regenerated from those exact bytes.
+The compatibility manifest identifies this as a candidate pending required CI
+and installed acceptance; this pin update does not establish those results.
