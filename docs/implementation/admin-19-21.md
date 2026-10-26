@@ -27,9 +27,20 @@ authority. Backend PR #39 supplies the paired Stock projection and contract.
 Full analysis is clean. The standard Flutter suite passes 216 tests; its live
 test is skipped unless the disposable backend fixture is supplied. Handwritten
 production line coverage is 78.13% (4721/6042), above the enforced 50% minimum.
-The real HTTP adapter diagnostic passes against the synthetic migrated backend;
-final immutable-pair and Linux package evidence will be recorded after the
-supported backend commit is pinned.
+The exact immutable-pair gate passes against a clean checkout of backend
+`769518dc50e89004db1e1718417e8daad378618e`, with all 32 migrations applied to
+disposable SQLite. Real HTTP requests exercise the production native Admin
+adapters, including same-session capability loss and restoration. The paired
+backend contract verifier and PlatformAccessWorkflow suite pass (29 tests,
+774 assertions; local PHP 8.5.12, CI pins 8.5.9).
+
+The Linux release bundle and DEB/AppImage/tar packages build successfully;
+checksums, native linkage and release-script safeguards pass. This workspace
+blocks the Unix sockets needed for D-Bus/Xvfb launch, so the existing clean-host
+CI installation/first-frame lane remains the launch evidence authority. The
+canonical agent check was run; its environment-blocked steps were continued
+after installing the declared host dependencies. Required PR CI remains visible
+on PR #22.
 
 The tests exercise synthetic products and native operator sessions. They do not
 inspect this operator's actual household/import records or establish production

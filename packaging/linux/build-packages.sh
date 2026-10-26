@@ -15,16 +15,21 @@ if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
 fi
 
 test -x "${BUNDLE}/providentia_admin"
-# Store the build's exact origin/revisions/contract inside every package. This
-# evidence deliberately leaves deployed migrations and authenticated acceptance
-# unverified; only the installation operator can record those results.
-PROVIDENTIA_RELEASE_VERSION="${VERSION}" \
-  node "${ROOT}/tool/write_release_provenance.mjs" "${BUNDLE}/release-provenance.json"
 mkdir -p "${OUTPUT}"
 find "${OUTPUT}" -mindepth 1 -maxdepth 1 -type f -delete
 
 WORK_ROOT="$(mktemp -d)"
 trap 'rm -rf -- "${WORK_ROOT}"' EXIT
+
+# Assemble one snapshot for all formats without modifying the Flutter build.
+SOURCE_BUNDLE="$(realpath "${BUNDLE}")"
+BUNDLE="${WORK_ROOT}/bundle"
+install -d "${BUNDLE}"
+cp -a "${SOURCE_BUNDLE}/." "${BUNDLE}/"
+# This build record leaves deployed migrations and authenticated acceptance
+# unverified; only the installation operator can record those results.
+PROVIDENTIA_RELEASE_VERSION="${VERSION}" \
+  node "${ROOT}/tool/write_release_provenance.mjs" "${BUNDLE}/release-provenance.json"
 
 tar --create --gzip --file "${OUTPUT}/providentia-admin-${VERSION}-linux-x86_64.tar.gz" \
   --directory "${BUNDLE}" .

@@ -79,11 +79,84 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  backend-compatibility:
+    name: Paired backend native operator compatibility
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out Admin source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Read immutable backend support pin
+        id: backend
+        run: |
+          node --input-type=module - <<'JS' >> "$GITHUB_OUTPUT"
+          import { readFileSync } from 'node:fs';
+          import { validateCompatibilityManifest } from './tool/verify_backend_compatibility.mjs';
+          const pin = validateCompatibilityManifest(JSON.parse(readFileSync('contracts/backend-compatibility.json', 'utf8')));
+          console.log(`repository=${pin.repository}`);
+          console.log(`revision=${pin.revision}`);
+          JS
+
+      - name: Check out supported backend revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ steps.backend.outputs.repository }}
+          ref: ${{ steps.backend.outputs.revision }}
+          path: _paired_backend
+          persist-credentials: false
+
+      - name: Install pinned Node runtime
+        run: |
+          bash tool/install_node_linux.sh "$RUNNER_TEMP/providentia-node"
+          echo "$RUNNER_TEMP/providentia-node/node/bin" >> "$GITHUB_PATH"
+
+      - name: Compare exact supported artifacts and generated allowlist
+        run: |
+          bash tool/materialize_contract.sh
+          bash _paired_backend/tool/materialize-openapi-contract.sh
+          node tool/verify_backend_compatibility.mjs _paired_backend
+          node tool/verify_contract.mjs
+          node tool/generate_admin_api_client.mjs --check
+
+      - name: Install paired backend PHP runtime
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.5.9'
+          extensions: gd, intl, json, mbstring, pdo_sqlite, redis
+          coverage: none
+          tools: composer:2.10.2
+
+      - name: Install locked backend dependencies
+        working-directory: _paired_backend
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Verify backend authorization, household revisions and contract
+        working-directory: _paired_backend
+        run: |
+          php tests/Contract/verify-openapi.php
+          vendor/bin/phpunit tests/Integration/Platform/PlatformAccessWorkflowTest.php
+
+      - name: Install pinned Admin Flutter runtime
+        run: |
+          bash tool/install_flutter_linux.sh "$RUNNER_TEMP/providentia-sdk"
+          echo "$RUNNER_TEMP/providentia-sdk/flutter/bin" >> "$GITHUB_PATH"
+          export PATH="$RUNNER_TEMP/providentia-sdk/flutter/bin:$PATH"
+          flutter pub get --enforce-lockfile
+
+      - name: Exercise real native operator adapters against isolated backend
+        run: bash tool/run_backend_compatibility.sh "$PWD/_paired_backend"
+
   linux-release-build:
     name: Linux release and packages
     needs: test
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      PROVIDENTIA_BUILD_API_ORIGIN: https://api.example.invalid
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

@@ -4,21 +4,19 @@ import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {validateCompatibilityManifest} from './verify_backend_compatibility.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const expectedDigest =
-  '2b7b38490dc42ad967cfff7e32dd56db41d30842a7d39845b9beecb7f7d4e254';
+const supported = validateCompatibilityManifest(JSON.parse(await readFile(
+  path.join(root, 'contracts', 'backend-compatibility.json'), 'utf8',
+)));
+const expectedDigest = supported.openapiSha256;
 const contractBytes = await readFile(
   path.join(root, 'contracts', 'providentia-v1.json'),
 );
 const contract = JSON.parse(contractBytes.toString('utf8'));
-const lockBytes = await readFile(path.join(root, 'contracts', 'contract.lock.json'));
-const lock = JSON.parse(lockBytes.toString('utf8'));
-const compatibility = JSON.parse(
-  await readFile(path.join(root, 'contracts', 'backend-compatibility.json'), 'utf8'),
-);
-const archiveBytes = await readFile(
-  path.join(root, 'contracts', 'source', 'providentia-v1.json.gz'),
+const lock = JSON.parse(
+  await readFile(path.join(root, 'contracts', 'contract.lock.json'), 'utf8'),
 );
 const manifest = JSON.parse(
   await readFile(
@@ -45,19 +43,10 @@ const generated = await readFile(
 );
 
 const digest = createHash('sha256').update(contractBytes).digest('hex');
-assert(digest === expectedDigest, 'OpenAPI digest drifted from backend 2.4.0.');
+assert(digest === expectedDigest, 'OpenAPI digest drifted from the supported backend.');
 assert(contract.openapi === '3.1.0', 'OpenAPI version must be 3.1.0.');
-assert(contract.info?.version === '2.4.0', 'API version must be 2.4.0.');
-assert(Object.keys(contract.paths ?? {}).length === 201, 'Expected 201 API paths.');
-assert(compatibility.repository === 'providentia-systems/backend', 'Supported backend repository drifted.');
-assert(/^[0-9a-f]{40}$/.test(compatibility.revision), 'Supported backend must use an immutable revision.');
-assert(compatibility.apiVersion === contract.info.version, 'Supported backend API version drifted.');
-assert(compatibility.openapiSha256 === digest, 'Supported backend contract digest drifted.');
-assert(compatibility.archiveSha256 === createHash('sha256').update(archiveBytes).digest('hex'),
-  'Supported backend canonical archive drifted.');
-assert(compatibility.lockSha256 === createHash('sha256').update(lockBytes).digest('hex'),
-  'Supported backend canonical lock drifted.');
-assert(compatibility.pathCount === Object.keys(contract.paths).length, 'Supported path count drifted.');
+assert(contract.info?.version === supported.apiVersion, 'API version differs from the supported backend.');
+assert(Object.keys(contract.paths ?? {}).length === supported.pathCount, 'Supported API path count drifted.');
 
 let operationCount = 0;
 const operationIds = new Set();
@@ -69,35 +58,28 @@ for (const value of Object.values(contract.paths ?? {})) {
     }
   }
 }
-assert(operationCount === 244, 'Expected 244 API operations.');
-assert(compatibility.operationCount === operationCount, 'Supported operation count drifted.');
+assert(operationCount === supported.operationCount, 'Supported API operation count drifted.');
 assert(
   lock.artifacts?.['providentia-v1.json']?.sha256 === expectedDigest,
   'Backend contract lock digest does not match.',
 );
 assert(manifest.contractSha256 === expectedDigest, 'Generated manifest drifted.');
 assert(manifest.repositoryRole === 'linux-admin-client', 'Generated facade role drifted.');
-assert(manifest.operationCount === 92, 'Generated Admin operation count drifted.');
-assert(compatibility.adminOperationCount === manifest.operationCount, 'Supported Admin operation count drifted.');
+assert(manifest.operationCount === supported.adminOperationCount, 'Generated Admin operation count drifted.');
 assert(
   generated.includes(`// Contract SHA-256: ${expectedDigest}`),
   'Generated Dart client is not bound to this contract.',
 );
 assert(!generated.includes('/api/v1/homes'), 'Generated Admin client exposes homes.');
-assert(lock.apiVersion === '2.4.0', 'Contract lock API version drifted.');
-assert(manifest.contractVersion === '2.4.0', 'Generated manifest API version drifted.');
-assert(Object.keys(contract.components?.schemas ?? {}).length === 321, 'Expected 321 schemas.');
-assert(compatibility.schemaCount === Object.keys(contract.components.schemas).length,
-  'Supported schema count drifted.');
-const stockRecord = contract.components.schemas.OperatorStockRecord;
-for (const field of ['name', 'pack_text', 'unit', 'quantity', 'home_product_id',
-  'revision', 'catalog_reference', 'home_product_status']) {
-  assert(stockRecord?.required?.includes(field), `Stock metadata requires ${field}.`);
-}
-assert(stockRecord.properties.quantity.type === 'string', 'Stock quantities must remain exact decimal strings.');
-assert(!stockRecord.required.includes('id'), 'Stock identity is the home/product composite key.');
+assert(lock.apiVersion === supported.apiVersion, 'Contract lock API version drifted.');
+assert(createHash('sha256').update(await readFile(path.join(root, 'contracts', 'contract.lock.json'))).digest('hex')
+  === supported.lockSha256, 'Exact backend contract lock drifted.');
+assert(createHash('sha256').update(await readFile(path.join(root, 'contracts', 'source', 'providentia-v1.json.gz'))).digest('hex')
+  === supported.archiveSha256, 'Exact backend canonical archive drifted.');
+assert(manifest.contractVersion === supported.apiVersion, 'Generated manifest API version drifted.');
+assert(Object.keys(contract.components?.schemas ?? {}).length === supported.schemaCount, 'Supported schema count drifted.');
 const allowedOperations = new Set(manifest.allowedOperationIds);
-assert(allowedOperations.size === 92, 'Admin allowlist contains duplicate or missing operations.');
+assert(allowedOperations.size === supported.adminOperationCount, 'Admin allowlist contains duplicate or missing operations.');
 for (const operationId of allowedOperations) {
   assert(operationIds.has(operationId), `Admin operation ${operationId} is absent from the contract.`);
 }
@@ -238,7 +220,49 @@ assert(
   'Generated Admin client must not expose removeHomeMembership.',
 );
 
-process.stdout.write(`Admin contract verified: 2.4.0 / ${digest}; backend ${compatibility.revision}.\n`);
+// Admin uses native bearer credentials. The browser namespace parameter is
+// optional and does not change the native operator allowlist or tenant boundary.
+const browserContext = contract.components?.parameters?.WebApplicationContext;
+assert(browserContext?.required === false, 'Browser context cannot be required for native Admin.');
+assert(browserContext?.name === 'X-Providentia-Application', 'Browser namespace parameter drifted.');
+
+// Handwritten household adapters depend on nullable override fields and an
+// explicit revision/reason. Neither clearing an override nor changing its scope
+// may silently become an edit to the shared catalog.
+const productUpdate = contract.components?.schemas?.UpdateOperatorHomeProductRequest;
+for (const field of ['privateName', 'originalPackText', 'homeCategoryId', 'globalCategoryId']) {
+  assert(productUpdate?.properties?.[field]?.type?.includes('null'),
+    `Operator product ${field} must preserve explicit null clearing.`);
+  assert(!productUpdate?.required?.includes(field),
+    `Operator product ${field} must allow omission to preserve the stored override.`);
+}
+for (const field of ['expectedRevision', 'reason']) {
+  assert(productUpdate?.required?.includes(field), `Operator product writes require ${field}.`);
+}
+assert(JSON.stringify(productUpdate?.properties?.unit?.enum) === JSON.stringify(['units', 'g', 'kg', 'ml', 'l']),
+  'Supported stock-unit labels drifted.');
+for (const status of ['403', '409', '422']) {
+  assert(contract.paths?.['/api/v1/admin/homes/{homeId}/products/{homeProductId}']?.patch?.responses?.[status],
+    `Operator product edits must document HTTP ${status}.`);
+}
+
+// Stock metadata is supplied by the paired backend for each balance. The
+// Admin table never guesses a product name by joining a paginated Products UI.
+const stockRecord = contract.components?.schemas?.OperatorStockRecord;
+for (const field of ['home_id', 'home_product_id', 'name', 'pack_text', 'unit', 'quantity',
+  'revision', 'catalog_reference', 'home_product_status', 'catalog_product_status', 'catalog_pack_status']) {
+  assert(stockRecord?.required?.includes(field), `Resolved operator stock requires ${field}.`);
+}
+assert(stockRecord?.properties?.quantity?.type === 'string',
+  'Stock quantities must preserve exact decimal strings.');
+assert(stockRecord?.properties?.quantity?.pattern?.startsWith('^-?'),
+  'Stock quantity schema must preserve signed balances.');
+assert(stockRecord?.properties?.unit?.type?.includes('null'),
+  'A missing stock reference must retain its row with a nullable unit.');
+assert(!stockRecord?.required?.includes('id'),
+  'Stock identity is the home/product composite key.');
+
+process.stdout.write(`Admin contract verified: ${supported.apiVersion} / ${digest}.\n`);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
