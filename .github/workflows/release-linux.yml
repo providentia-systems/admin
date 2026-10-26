@@ -85,6 +85,7 @@ jobs:
     env:
       PROVIDENTIA_RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
       PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+      PROVIDENTIA_BUILD_API_ORIGIN: ${{ vars.PRODUCTION_API_BASE_URL }}
     steps:
       - name: Check out exact release ref
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -126,12 +127,6 @@ jobs:
         run: |
           bash packaging/linux/build-packages.sh
           dart pub deps --json > build/packages/dart-dependencies.json
-          jq --null-input \
-            --arg commit "$GITHUB_SHA" \
-            --arg runId "$GITHUB_RUN_ID" \
-            --arg version "$PROVIDENTIA_RELEASE_VERSION" \
-            '{commit: $commit, runId: $runId, version: $version, platform: "linux-x64"}' \
-            > build/packages/release-provenance.json
           (
             cd build/packages
             find . -maxdepth 1 -type f ! -name SHA256SUMS ! -name '*.asc' \

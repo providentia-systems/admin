@@ -15,6 +15,11 @@ if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
 fi
 
 test -x "${BUNDLE}/providentia_admin"
+# Store the build's exact origin/revisions/contract inside every package. This
+# evidence deliberately leaves deployed migrations and authenticated acceptance
+# unverified; only the installation operator can record those results.
+PROVIDENTIA_RELEASE_VERSION="${VERSION}" \
+  node "${ROOT}/tool/write_release_provenance.mjs" "${BUNDLE}/release-provenance.json"
 mkdir -p "${OUTPUT}"
 find "${OUTPUT}" -mindepth 1 -maxdepth 1 -type f -delete
 
@@ -70,5 +75,6 @@ fi
 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "${TOOL}" "${APPDIR}" \
   "${OUTPUT}/Providentia_Admin-${VERSION}-x86_64.AppImage"
 
+cp "${BUNDLE}/release-provenance.json" "${OUTPUT}/release-provenance.json"
 (cd "${OUTPUT}" && sha256sum -- * > SHA256SUMS)
 echo "Linux packages written to ${OUTPUT}."

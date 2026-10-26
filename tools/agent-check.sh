@@ -27,6 +27,7 @@ bash tool/test_linux_release_scripts.sh
 flutter build linux --release \
   --dart-define=PROVIDENTIA_API_BASE_URL=https://api.example.invalid
 PROVIDENTIA_RELEASE_VERSION=0.1.0-dev \
+PROVIDENTIA_BUILD_API_ORIGIN=https://api.example.invalid \
   bash packaging/linux/build-packages.sh
 PROVIDENTIA_LINUX_LAUNCH_SMOKE=true \
   bash tool/verify_linux_deb.sh \
