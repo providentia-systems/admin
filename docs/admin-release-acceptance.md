@@ -8,6 +8,10 @@ native bearer sessions. This complements the editor, Stock and authorization
 widget/repository regressions. It does not establish the state of an installed
 application or a deployed database.
 
+The current Linux Admin uses native bearer sessions in its own credential
+namespace. Browser cookie context headers apply only to a browser adapter;
+their absence is not evidence of a native Admin cookie collision.
+
 ## Build evidence
 
 Build and package with the same public API origin. The protected release

@@ -71,7 +71,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     }
     const evidence = releaseProvenance({
       revision: git('rev-parse', 'HEAD'),
-      sourceDirty: git('status', '--porcelain', '--untracked-files=no') !== '',
+      sourceDirty: git('status', '--porcelain', '--untracked-files=normal') !== '',
       version: process.env.PROVIDENTIA_RELEASE_VERSION || '0.1.0',
       apiOrigin: process.env.PROVIDENTIA_BUILD_API_ORIGIN,
       compatibility,

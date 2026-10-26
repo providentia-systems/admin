@@ -8,6 +8,11 @@
   identity, authorization, privacy, AI and release rules shared by all three
   repositories.
 
+- [Household editing and Stock](household-workflows.md) — effective overrides,
+  readable balances and supported backend boundaries.
+- [Paired release acceptance](admin-release-acceptance.md) — immutable compatibility
+  checks, package provenance and installed operator verification.
+
 The backend repository owns server deployment and secret configuration. Start
 with its `docs/deployment/server-quick-start.md`; Admin receives only the public
 HTTPS API origin.
