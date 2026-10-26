@@ -257,6 +257,297 @@ void main() {
     );
   }
 
+  for (final size in [const Size(720, 700), const Size(1440, 900)]) {
+    testWidgets(
+      'stock leads with resolved identity and preserves every signed decimal at ${size.width}px',
+      (tester) async {
+        final api = FakeApi((request) async {
+          if (request.path.endsWith('/image')) {
+            return ApiResponse(
+              statusCode: 204,
+              headers: {},
+              bytes: Uint8List(0),
+            );
+          }
+          if (request.path.endsWith('/homes')) {
+            return jsonResponse({
+              'data': [
+                {'id': 'home-a', 'name': 'Family'},
+              ],
+            });
+          }
+          if (request.path.endsWith('/home-a')) {
+            return jsonResponse({'id': 'home-a', 'name': 'Family'});
+          }
+          if (request.path.endsWith('/records/products')) {
+            // This incomplete page must never be used to join stock metadata.
+            return jsonResponse({
+              'data': [
+                {
+                  'id': 'linked',
+                  'name': 'Stale product page',
+                  'category_name': 'Category from incomplete products page',
+                },
+              ],
+            });
+          }
+          return jsonResponse({
+            'data': [
+              {
+                'home_id': 'home-a',
+                'home_product_id': 'linked',
+                'quantity': '-1.23456789',
+                'revision': 14,
+                'last_movement_id': 'movement-linked',
+                'checkpoint_id': 'checkpoint-linked',
+                'updated_at': '2026-10-26T09:00:00Z',
+                'name': 'Basmati rice',
+                'brand': 'Test brand',
+                'pack_text': '5 kg bag',
+                'unit': 'kg',
+                'category_name': 'Food',
+                'category_scope': 'Global',
+                'catalog_reference': 'Catalog linked',
+                'home_product_status': 'active',
+                'uncertain': true,
+                'pending_quantity': '-0.00000001',
+              },
+              {
+                'home_id': 'home-a',
+                'home_product_id': 'private',
+                'quantity': '0.00000000',
+                'revision': 2,
+                'name': 'Garden beans',
+                'pack_text': '',
+                'unit': 'each',
+                'catalog_reference': 'Private product',
+                'home_product_status': 'active',
+                'uncertain': 0,
+              },
+              {
+                'home_id': 'home-a',
+                'home_product_id': 'archived',
+                'quantity': '0.12500000',
+                'revision': 5,
+                'name': 'Archived flour',
+                'pack_text': '2 kg bag',
+                'unit': 'each',
+                'catalog_reference': 'Catalog linked',
+                'home_product_status': 'archived',
+                'catalog_product_status': 'archived',
+                'catalog_pack_status': 'archived',
+                'uncertain': '0',
+              },
+              {
+                'home_id': 'home-a',
+                'home_product_id': 'missing-home-product',
+                'quantity': '-5.00000000',
+                'revision': 3,
+                'name': null,
+                'pack_text': null,
+                'unit': null,
+                'category_name': null,
+                'catalog_reference': 'Missing home product',
+              },
+              {
+                'home_id': 'home-a',
+                'home_product_id': 'legacy-without-metadata',
+                'quantity': '0.00000001',
+                'revision': 1,
+              },
+            ],
+          });
+        });
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildAdminTheme(),
+            home: Scaffold(
+              body: OperatorRecordsPage(
+                session: await _session(),
+                api: api,
+                authorization: OperatorAuthorization.fromPermissions([
+                  'homes.read',
+                ]),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Open Family'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(DropdownButton<String>));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('stock').last);
+        await tester.pumpAndSettle();
+
+        final table = tester.widget<DataTable>(find.byType(DataTable));
+        expect(
+          table.columns.take(7).map((column) => (column.label as Text).data),
+          [
+            'Product',
+            'Pack',
+            'Stock unit',
+            'Quantity',
+            'Evidence',
+            'Balance revision',
+            'Product reference',
+          ],
+        );
+        expect(table.rows, hasLength(5));
+        expect(find.text('Home ID'), findsOneWidget);
+        expect(find.text('Household product ID'), findsOneWidget);
+        expect(find.text('Catalog product status'), findsOneWidget);
+        expect(find.text('Catalog pack status'), findsOneWidget);
+        expect(find.text('Basmati rice'), findsOneWidget);
+        expect(find.text('5 kg bag'), findsOneWidget);
+        expect(find.text('Garden beans'), findsOneWidget);
+        expect(find.text('Archived flour'), findsOneWidget);
+        expect(find.text('archived'), findsWidgets);
+        expect(find.text('Missing home product'), findsOneWidget);
+        expect(find.text('Unresolved product'), findsNWidgets(2));
+        expect(find.text('Metadata unavailable'), findsOneWidget);
+        expect(find.text('Not specified'), findsNWidgets(3));
+        expect(find.text('Stale product page'), findsNothing);
+        expect(
+          find.text('Category from incomplete products page'),
+          findsNothing,
+        );
+        expect(find.text('Unresolved evidence'), findsOneWidget);
+        expect(find.text('No unresolved evidence'), findsNWidgets(2));
+        for (final quantity in [
+          '-1.23456789',
+          '0.00000000',
+          '0.12500000',
+          '-5.00000000',
+          '0.00000001',
+          '-0.00000001',
+        ]) {
+          expect(find.text(quantity), findsOneWidget);
+        }
+        expect(find.text('missing-home-product'), findsOneWidget);
+        expect(find.text('movement-linked'), findsOneWidget);
+        expect(find.text('checkpoint-linked'), findsOneWidget);
+        expect(find.text('2026-10-26T09:00:00Z'), findsOneWidget);
+        expect(find.text('Showing 1–5'), findsOneWidget);
+        expect(find.text('Edit record'), findsNothing);
+        expect(
+          api.requests.where((request) => request.method != 'GET'),
+          isEmpty,
+        );
+        expect(
+          api.requests.where(
+            (request) => request.path.endsWith('/records/products'),
+          ),
+          hasLength(1),
+        );
+        final horizontal = tester.widget<Scrollbar>(
+          find.byKey(
+            const ValueKey<String>('admin-table-horizontal-scrollbar'),
+          ),
+        );
+        expect(horizontal.controller!.position.maxScrollExtent, greaterThan(0));
+        horizontal.controller!.jumpTo(
+          horizontal.controller!.position.maxScrollExtent,
+        );
+        await tester.pump();
+        expect(horizontal.controller!.offset, greaterThan(0));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('stock paging retains 100-row balance membership and offsets', (
+    tester,
+  ) async {
+    final api = FakeApi((request) async {
+      if (request.path.endsWith('/image')) {
+        return ApiResponse(statusCode: 204, headers: {}, bytes: Uint8List(0));
+      }
+      if (request.path.endsWith('/homes')) {
+        return jsonResponse({
+          'data': [
+            {'id': 'home-a', 'name': 'Family'},
+          ],
+        });
+      }
+      if (request.path.endsWith('/home-a')) {
+        return jsonResponse({'id': 'home-a', 'name': 'Family'});
+      }
+      if (request.path.endsWith('/records/products')) {
+        return jsonResponse({'data': <Object?>[]});
+      }
+      final offset = int.parse(request.query!['offset']!);
+      return jsonResponse({
+        'data': [
+          for (var index = offset; index < (offset == 0 ? 100 : 101); index++)
+            {
+              'home_product_id': 'balance-$index',
+              'name': 'Product $index',
+              'pack_text': 'Not specified',
+              'unit': 'each',
+              'quantity': index.isEven ? '0.00000000' : '-0.50000000',
+              'revision': index + 1,
+              'uncertain': false,
+              'catalog_reference': 'Private product',
+            },
+        ],
+      });
+    });
+    await tester.binding.setSurfaceSize(const Size(720, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: OperatorRecordsPage(
+            session: await _session(),
+            api: api,
+            authorization: OperatorAuthorization.fromPermissions([
+              'homes.read',
+            ]),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open Family'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('stock').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<DataTable>(find.byType(DataTable)).rows,
+      hasLength(100),
+    );
+    expect(find.text('Showing 1–100'), findsOneWidget);
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<DataTable>(find.byType(DataTable)).rows, hasLength(1));
+    expect(find.text('Product 100'), findsOneWidget);
+    expect(find.text('Showing 101–101'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Next'))
+          .onPressed,
+      isNull,
+    );
+    await tester.tap(find.text('Previous'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<DataTable>(find.byType(DataTable)).rows,
+      hasLength(100),
+    );
+    expect(
+      api.requests
+          .where((request) => request.path.endsWith('/records/stock'))
+          .map((request) => request.query!['offset']),
+      ['0', '100', '0'],
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'home inspection uses operator routes and limits people collections to delegated access',
     (tester) async {
