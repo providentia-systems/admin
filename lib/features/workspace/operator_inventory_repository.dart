@@ -1,5 +1,7 @@
 import '../../core/api/api_client.dart';
 import '../../core/security/secure_id.dart';
+import '../catalog/catalog_models.dart';
+import '../catalog/catalog_repository.dart';
 
 enum OperatorInventoryKind { product, category, location, store }
 
@@ -14,6 +16,11 @@ final class OperatorInventoryRecord {
     this.packId,
     this.packText,
     this.homeCategoryId,
+    this.globalCategoryId,
+    this.categoryName,
+    this.resolvedName,
+    this.resolvedPackText,
+    this.unit,
     this.locationKind,
     this.storeLocation,
   });
@@ -52,6 +59,11 @@ final class OperatorInventoryRecord {
       packId: text('pack_id'),
       packText: text('original_pack_text'),
       homeCategoryId: text('home_category_id'),
+      globalCategoryId: text('global_category_id'),
+      categoryName: text('category_name'),
+      resolvedName: text('name'),
+      resolvedPackText: text('pack_text'),
+      unit: text('unit'),
       locationKind: text('kind'),
       storeLocation: text('location'),
     );
@@ -66,6 +78,11 @@ final class OperatorInventoryRecord {
   final String? packId;
   final String? packText;
   final String? homeCategoryId;
+  final String? globalCategoryId;
+  final String? categoryName;
+  final String? resolvedName;
+  final String? resolvedPackText;
+  final String? unit;
   final String? locationKind;
   final String? storeLocation;
   bool get catalogBacked => productId != null || packId != null;
@@ -102,6 +119,15 @@ final class OperatorInventoryRepository {
     }
   }
 
+  Future<List<PublishedCategory>> globalCategories() async {
+    final categories = <PublishedCategory>[];
+    for (var offset = 0; ; offset += 100) {
+      final page = await CatalogRepository(_api).categories(offset: offset);
+      categories.addAll(page);
+      if (page.length < 100) return List.unmodifiable(categories);
+    }
+  }
+
   Future<void> saveCategory({
     required String homeId,
     required String id,
@@ -123,11 +149,14 @@ final class OperatorInventoryRepository {
     required String id,
     required int expectedRevision,
     required String reason,
-    required bool editMetadata,
-    required bool catalogBacked,
+    bool setPrivateName = false,
     String? privateName,
+    bool setPackText = false,
     String? packText,
+    bool setCategory = false,
     String? homeCategoryId,
+    String? globalCategoryId,
+    String? unit,
     String? status,
   }) => _save(
     homeId: homeId,
@@ -136,11 +165,15 @@ final class OperatorInventoryRepository {
     expectedRevision: expectedRevision,
     reason: reason,
     fields: {
-      if (editMetadata && !catalogBacked) ...{
-        'privateName': privateName,
-        'originalPackText': packText,
+      if (setPrivateName) 'privateName': privateName,
+      if (setPackText) 'originalPackText': packText,
+      // Category scope changes are atomic. Null clears an override; omission
+      // preserves it, including a currently unavailable category reference.
+      if (setCategory) ...{
+        'homeCategoryId': homeCategoryId,
+        'globalCategoryId': globalCategoryId,
       },
-      if (editMetadata) 'homeCategoryId': homeCategoryId,
+      'unit': ?unit,
       'status': ?status,
     },
   );
@@ -193,6 +226,9 @@ final class OperatorInventoryRepository {
         reason.trim().isEmpty ||
         reason.trim().length > 500) {
       throw const FormatException('A revision and audit reason are required.');
+    }
+    if (fields.isEmpty) {
+      throw const FormatException('Choose a household change before saving.');
     }
     final body = <String, Object?>{
       if (expectedRevision == 0) 'id': id,

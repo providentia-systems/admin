@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/session_controller.dart';
 import '../../core/security/secure_id.dart';
+import '../catalog/catalog_models.dart';
 import 'operator_inventory_repository.dart';
 
 final class OperatorInventoryEditor extends StatefulWidget {
@@ -31,13 +32,20 @@ class _OperatorInventoryEditorState extends State<OperatorInventoryEditor> {
   late final _epoch = widget.session.authorizationEpoch;
   late final _name = TextEditingController(text: widget.record?.name ?? '');
   late final _pack = TextEditingController(text: widget.record?.packText ?? '');
-  late String? _category = widget.record?.homeCategoryId;
+  late String _category = widget.record?.homeCategoryId != null
+      ? 'local:${widget.record!.homeCategoryId}'
+      : widget.record?.globalCategoryId != null
+      ? 'global:${widget.record!.globalCategoryId}'
+      : 'inherited';
+  late final String _initialCategory = _category;
+  late String _unit = widget.record?.unit ?? 'units';
   final _reason = TextEditingController();
   late final _storeLocation = TextEditingController(
     text: widget.record?.storeLocation ?? '',
   );
   late String _locationKind = widget.record?.locationKind ?? 'other';
   List<OperatorInventoryRecord> _categories = const [];
+  List<PublishedCategory> _globalCategories = const [];
   bool _loading = false;
   bool _busy = false;
   bool _reloadRequired = false;
@@ -75,7 +83,8 @@ class _OperatorInventoryEditorState extends State<OperatorInventoryEditor> {
       _storeLocation.clear();
       setState(() {
         _categories = const [];
-        _category = null;
+        _globalCategories = const [];
+        _category = 'inherited';
         _error = null;
         _reloadRequired = true;
       });
@@ -87,15 +96,18 @@ class _OperatorInventoryEditorState extends State<OperatorInventoryEditor> {
     try {
       final categories = await widget.repository.categories(widget.homeId);
       if (!_authorized) return;
+      final globals = await widget.repository.globalCategories();
+      if (!_authorized) return;
       setState(() {
         _categories = categories;
+        _globalCategories = globals;
         _loading = false;
       });
     } on Object {
       if (!_authorized) return;
       setState(() {
         _error =
-            'Household categories could not be loaded. Close and reload before editing.';
+            'Category choices could not be loaded. Close and reload before editing.';
         _loading = false;
         _reloadRequired = true;
       });
@@ -113,6 +125,16 @@ class _OperatorInventoryEditorState extends State<OperatorInventoryEditor> {
       setState(() => _error = 'Enter a name.');
       return;
     }
+    if (!statusOnly &&
+        _product &&
+        widget.record != null &&
+        _name.text.trim() == widget.record!.name &&
+        _pack.text.trim() == (widget.record!.packText ?? '') &&
+        _category == _initialCategory &&
+        _unit == (widget.record!.unit ?? 'units')) {
+      Navigator.of(context).pop(false);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -124,11 +146,31 @@ class _OperatorInventoryEditorState extends State<OperatorInventoryEditor> {
           id: _id,
           expectedRevision: widget.record?.revision ?? 0,
           reason: _reason.text,
-          editMetadata: !statusOnly,
-          catalogBacked: _catalog,
-          privateName: _name.text.trim(),
+          setPrivateName:
+              !statusOnly &&
+              (widget.record == null ||
+                  _name.text.trim() != widget.record!.name),
+          privateName: _name.text.trim().isEmpty ? null : _name.text.trim(),
+          setPackText:
+              !statusOnly &&
+              (widget.record == null ||
+                  _pack.text.trim() != (widget.record!.packText ?? '')),
           packText: _pack.text.trim().isEmpty ? null : _pack.text.trim(),
-          homeCategoryId: _category,
+          setCategory:
+              !statusOnly &&
+              (widget.record == null || _category != _initialCategory),
+          homeCategoryId: _category.startsWith('local:')
+              ? _category.substring(6)
+              : null,
+          globalCategoryId: _category.startsWith('global:')
+              ? _category.substring(7)
+              : null,
+          unit:
+              !statusOnly &&
+                  (widget.record == null ||
+                      _unit != (widget.record!.unit ?? 'units'))
+              ? _unit
+              : null,
           status: status,
         );
       } else if (widget.kind == OperatorInventoryKind.location) {
@@ -198,24 +240,35 @@ class _OperatorInventoryEditorState extends State<OperatorInventoryEditor> {
             children: [
               if (_catalog)
                 const Text(
-                  'Catalog identity is maintained in Catalog. You can change this household category or archive this household product.',
+                  'Name and pack overrides apply only to this household. Clear an override to use the catalog value. Catalog identity, stock quantities and history stay attached to this product.',
                 ),
-              if (!_catalog)
-                TextField(
-                  controller: _name,
-                  enabled: enabled,
-                  maxLength: widget.kind == OperatorInventoryKind.location
-                      ? 120
-                      : 191,
-                  decoration: const InputDecoration(labelText: 'Name'),
+              TextField(
+                controller: _name,
+                enabled: enabled,
+                maxLength: widget.kind == OperatorInventoryKind.location
+                    ? 120
+                    : 191,
+                decoration: InputDecoration(
+                  labelText: _catalog ? 'Household name override' : 'Name',
+                  helperText: _catalog
+                      ? 'Current: ${widget.record?.resolvedName ?? 'Catalog name'}'
+                      : null,
+                  helperMaxLines: 3,
                 ),
-              if (_product && !_catalog)
+              ),
+              if (_product)
                 TextField(
                   controller: _pack,
                   enabled: enabled,
                   maxLength: 191,
-                  decoration: const InputDecoration(
-                    labelText: 'Pack or measure',
+                  decoration: InputDecoration(
+                    labelText: _catalog
+                        ? 'Household pack override'
+                        : 'Pack or measure',
+                    helperText: _catalog
+                        ? 'Current: ${widget.record?.resolvedPackText ?? 'Catalog pack, when available'}'
+                        : null,
+                    helperMaxLines: 3,
                   ),
                 ),
               if (widget.kind == OperatorInventoryKind.location)
@@ -247,42 +300,103 @@ class _OperatorInventoryEditorState extends State<OperatorInventoryEditor> {
                   ),
                 ),
               if (_loading) const LinearProgressIndicator(),
-              if (_product && !_loading)
+              if (_product && !_loading) ...[
                 DropdownButtonFormField<String>(
-                  initialValue: _category ?? '',
+                  key: const ValueKey('operator-category'),
+                  initialValue: _category,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Household category',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Category'),
                   items: [
-                    const DropdownMenuItem(
-                      value: '',
-                      child: Text('No category'),
+                    DropdownMenuItem(
+                      value: 'inherited',
+                      child: Text(
+                        _catalog
+                            ? 'Use catalog category (inherited)'
+                            : 'No category override',
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     for (final category in _categories)
                       if (category.status == 'active' ||
-                          category.id == _category)
+                          'local:${category.id}' == _initialCategory)
                         DropdownMenuItem(
-                          value: category.id,
+                          value: 'local:${category.id}',
                           child: Text(
-                            '${category.name}${category.status == 'archived' ? ' (archived)' : ''}',
+                            'Local: ${category.name}${category.status == 'archived' ? ' (archived)' : ''}',
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                    if (_category != null &&
+                    for (final category in _globalCategories)
+                      DropdownMenuItem(
+                        value: 'global:${category.id}',
+                        child: Text(
+                          'Global: ${category.canonicalName}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    if (_initialCategory.startsWith('local:') &&
                         !_categories.any(
-                          (category) => category.id == _category,
+                          (category) =>
+                              'local:${category.id}' == _initialCategory,
                         ))
                       DropdownMenuItem(
-                        value: _category,
-                        child: const Text('Unavailable category'),
+                        value: _initialCategory,
+                        child: Text(
+                          'Local: ${widget.record?.categoryName ?? 'Unavailable category'} (unavailable)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    if (_initialCategory.startsWith('global:') &&
+                        !_globalCategories.any(
+                          (category) =>
+                              'global:${category.id}' == _initialCategory,
+                        ))
+                      DropdownMenuItem(
+                        value: _initialCategory,
+                        child: Text(
+                          'Global: ${widget.record?.categoryName ?? 'Unavailable category'} (unavailable)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                   ],
                   onChanged: enabled
-                      ? (value) => setState(
-                          () => _category = value == '' ? null : value,
-                        )
+                      ? (value) => setState(() => _category = value!)
                       : null,
                 ),
+                Text(
+                  _category == 'inherited'
+                      ? _catalog
+                            ? 'Uses the catalog category when available. Clearing overrides does not force a linked product to be uncategorized.'
+                            : 'No household or global override; this private product is uncategorized.'
+                      : 'This selection overrides the catalog category for this household only.',
+                ),
+                if (_category == _initialCategory &&
+                    widget.record?.categoryName != null)
+                  Text(
+                    'Current effective category: ${widget.record!.categoryName}',
+                  ),
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('operator-unit'),
+                  initialValue: _unit,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Stock unit'),
+                  items: [
+                    for (final unit in ['units', 'g', 'kg', 'ml', 'l'])
+                      DropdownMenuItem(value: unit, child: Text(unit)),
+                    if (!['units', 'g', 'kg', 'ml', 'l'].contains(_unit))
+                      DropdownMenuItem(
+                        value: _unit,
+                        child: Text('$_unit (unavailable)'),
+                      ),
+                  ],
+                  onChanged: enabled
+                      ? (value) => setState(() => _unit = value!)
+                      : null,
+                ),
+                const Text(
+                  'Changing the stock unit does not convert quantities. The backend blocks changes with stock, count, shopping or minimum-preference evidence; use a separate product in that case.',
+                ),
+              ],
               TextField(
                 controller: _reason,
                 enabled: enabled,

@@ -32,7 +32,7 @@ void main() {
   });
 
   test(
-    'Step 2 family edits retain audit and never overwrite catalog identity',
+    'Step 2 family overrides retain identity and target household fields',
     () async {
       final api = FakeApi((request) async {
         expect(request.method, 'PATCH');
@@ -40,7 +40,10 @@ void main() {
         expect(request.body, <String, Object?>{
           'expectedRevision': 7,
           'reason': 'Synthetic categorization',
+          'privateName': 'Household description',
+          'originalPackText': 'Original 2x wording',
           'homeCategoryId': null,
+          'globalCategoryId': null,
         });
         return jsonResponse(<String, Object?>{'id': id});
       });
@@ -49,10 +52,11 @@ void main() {
         id: id,
         expectedRevision: 7,
         reason: 'Synthetic categorization',
-        editMetadata: true,
-        catalogBacked: true,
-        privateName: 'Must not overwrite the family',
-        packText: 'Must not guess a replacement pack',
+        setPrivateName: true,
+        privateName: 'Household description',
+        setPackText: true,
+        packText: 'Original 2x wording',
+        setCategory: true,
       );
       expect(api.requests, hasLength(1));
     },
